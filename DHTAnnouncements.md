@@ -120,6 +120,8 @@ These packets form an RPC DHT Packet pair.
 | `24`         | Nonce        | Random nonce              |
 | `[49,561]`   | Bytes        | Encrypted payload         |
 
+TODO: add requested announcement timeout, and add timeout in response.
+
 The payload is authenticated and encrypted with the announcement secret key 
 and the recipient's DHT public key and the given nonce, and consists of a Ping 
 ID and an announcement:
@@ -210,6 +212,19 @@ This is similar to the onion, but with only one hop.
 
 Note: this protocol should also be usable for announcing DHT Group Chats, 
 replacing the use of the onion there.
+
+TODO: rewrite as in issue #1
+(
+So I'm thinking: drop the sendback system, and just have two packets;
+"route request" as currently, and a new "delivery" packet which starts
+with a random symmetric encryption key followed by a payload encrypted
+with that key and the zero nonce (it's ok to use a fixed nonce since we
+only use this key once). The payload contains the IP/Port of the
+original sender of the route request, followed by the data from that
+request. A reply can be made by a route request to the source of the
+delivery packet, asking to route to the sender IP/Port given in that
+packet.
+)
 
 #### Route Request Packet
 This is sent as the payload of a Protocol packet.
@@ -509,6 +524,10 @@ We send Data Search requests once every 3 seconds to nodes on our list which
 we are not announced to, and once every 120 seconds to those we are announced 
 to.
 
+TODO: backoff; timeouts; handling rejection.
+
+TODO: use fewer announce nodes for long-inactive friends?
+
 # Searching
 For each offline friend, we search for its announcements using Data Search and 
 Data Retrieve requests, relayed via random DHT nodes / TCP servers we are 
@@ -541,6 +560,8 @@ Because it is possible that we have an outdated shared signing key for the
 friend, when we search for the shared announcement we also search for the 
 individual announcement, with the same process but without the initial period 
 of a high rate of requests.
+
+TODO: timeouts.
 
 
 # Invites (deprecated)
@@ -591,6 +612,9 @@ requests.
 
 We might also have to maintain a separate close list consisting only of peers 
 using the new system, to be used when answering Data Search requests.
+TODO: details. Note we can combine this with "hardening", i.e. ensuring we 
+only respond to data search requests with nodes which appear to be accepting 
+incoming connections from arbitrary hosts.
 
 ## Sharp
 Maybe better just to make a clean break - set up a new onionless network 
