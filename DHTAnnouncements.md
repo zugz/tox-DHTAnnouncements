@@ -564,31 +564,41 @@ of a high rate of requests.
 TODO: timeouts.
 
 
-# Invites (deprecated)
-This section discusses a system allowing a restricted kind of promiscuity. 
-However, I think on balance it is a bad idea, and I do not recommend it be 
-used.
+# Invites
+This section discusses a system allowing a restricted kind of promiscuity, 
+which could be implemented on top of the system described above.
 
-An invite key is a symmetric encryption key. An **invite announcement** is as 
-in the case of an individual announcement, except that we sign the 
-announcement with our ID signing key (as for public announcements) and  
-encrypt the result with the invite key.
+An **invite code** is the public key of an Ed25519 signing keypair. A 
+corresponding **invite announcement** is made exactly as in the case of a 
+shared announcement.
 
-We adapt the handshake packet to allow the invite key to be included in its 
-encrypted part. We then add as a friend anyone who sends us a handshake which 
-specifies a valid invite key.
+We adapt the handshake packet to allow an invite code to be included at the 
+end of the encrypted part. We then add as a friend anyone who sends us a 
+handshake which specifies a valid invite code.
 
-The intention is that we generate an invite key then send it out-of-band along 
-with our ID pubkey to some limited set of people. A time limit on its validity 
-could be set. In terms of friend requests, this is analagous to sending a 
-ToxID with a nospam and accepting every friend request we obtain without 
+The intention is that we generate an invite code and send it out-of-band along 
+with our ID pubkey to some limited set of people. A common instance of this is 
+asking someone who does not use tox to install it and find you on the network. 
+
+In terms of friend requests, an invite announcement is analagous to giving out 
+a ToxID with a nospam and accepting every friend request obtained without 
 checking the sender.
 
-One big problem with this idea is that it is difficult to explain to the user 
-the privacy consequences of the invite key being leaked. Others are the 
-required additional complexity in the user interface, and in the protocol.
+A time limit on the validity of an invite code and/or the number of peers who 
+can use it could be set; 1 day and 1 peer might be sensible defaults.
 
+With no such limits, an invite announcement plays the same role as a public 
+announcement, except that both the ID pubkey and the invite code have to be 
+distributed.
 
+One big problem with invite announcements is that it is difficult to explain 
+to the user the privacy consequences of the invite code being leaked. This 
+could be mitigated somewhat by warning against loose time/user limits. Another 
+problem is the additional complexity in the user interface - it would require 
+a means to supply an invite code on adding a friend (while making it clear 
+that supplying one might not be necessary), and a means to generate invite 
+codes. Preferably there would also be an indication of any active invite codes 
+and the option to cancel them or extend their validity.
 
 # Migration
 We could aim to transition from the onion system to this new friend finding 
