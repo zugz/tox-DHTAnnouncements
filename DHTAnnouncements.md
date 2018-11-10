@@ -188,11 +188,11 @@ used for a UDP amplification attack.
 ### Storing announcements
 Memory permitting, a DHT node should accept any Store Announcement Request and 
 store the announcement indexed by the announcement public key with the 
-lifetime requested up to a maximum of 300 seconds, and then respond with it to 
+lifetime requested up to a maximum of 900 seconds, and then respond with it to 
 any valid Data Retrieve Request for it within its lifetime. After the lifetime 
 has expired, the data should be deleted. A reannouncement with the hash of an 
-undeleted announcement may extend the lifetime of the announcement back to up 
-to 300 seconds. A reannouncement with an incorrect hash should lead to the 
+undeleted announcement may extend the lifetime of the announcement to up to 
+900 seconds. A reannouncement with an incorrect hash should lead to the 
 announcement being immediately deleted.
 
 When choosing what to store within given storage constraints, a node should 
