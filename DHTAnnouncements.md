@@ -100,6 +100,8 @@ the request, and the requester's DHT public key and sender IP/Port. In the
 case of a relayed packet (see below), the sender IP/Port is that given in the 
 Route Deliver packet; otherwise, it is the source IP/Port of the packet.
 
+TODO: use HMAC hashes here and throughout?
+
 The nodes returned are those closest to the Data Public Key known by the 
 responding node, as in the case of a Nodes Response.
 
@@ -120,17 +122,16 @@ These packets form an RPC DHT Packet pair.
 | `24`         | Nonce        | Random nonce              |
 | `[49,561]`   | Bytes        | Encrypted payload         |
 
-TODO: add requested announcement timeout, and add timeout in response.
-
 The payload is authenticated and encrypted with the announcement secret key 
 and the recipient's DHT public key and the given nonce, and consists of a Ping 
-ID and an announcement:
+ID, a requested timeout, and an announcement:
 
-| Length    | Type    | Contents          |
-|:----------|:--------|:------------------|
-| `32`      | Ping ID | Ping ID           |
-| `1`       | Bytes   | Announcement Type |
-| `[0-512]` | Bytes   | Announcement Data |
+| Length      | Type       | Contents            |
+|:------------|:-----------|:--------------------|
+| `32`        | Ping ID    | Ping ID             |
+| `4`         | `uint32_t` | Requested timeout   |
+| `1`         | Bytes      | Announcement Type   |
+| `[0-512]`   | Bytes      | Announcement Data   |
 
 The Ping ID should be set to the Ping ID obtained from a recent Data Search 
 response to a search for the same data public key. The recipient checks that 
@@ -138,6 +139,9 @@ this is valid before responding; that is, that it is equal to the Ping ID for
 the announcement public key with either the current rounded unix time or the 
 previous rounded unix time. This check is to prevent replay of old 
 announcements.
+
+The requested timeout is the time in seconds for which the announcement is 
+requested to be stored.
 
 The announcement type is 0 for an initial announcement or 1 for a 
 reannouncement.
@@ -155,7 +159,10 @@ announcement.
 | Length | Type       | Contents                |
 |:-------|:-----------|:------------------------|
 | `32`   | Public Key | Announcement public key |
-| `1`    | Bool       | Announcement is stored  |
+| `4`    | `uint32_t  | Stored time             |
+
+The stored time is 0 if the announcement request was rejected, else the time 
+in seconds that the announcement will be stored for.
 
 ### Data Retrieve Request and Response
 These packets form an RPC DHT Packet pair.
@@ -180,13 +187,13 @@ used for a UDP amplification attack.
 
 ### Storing announcements
 Memory permitting, a DHT node should accept any Store Announcement Request and 
-store the announcement indexed by the announcement public key with a lifetime 
-of 300 seconds, and then respond with it to any valid Data Retrieve Request 
-for it within its lifetime. After the lifetime has expired, the data should be 
-deleted. A reannouncement with the hash of an undeleted announcement should 
-extend the lifetime of the announcement back to 300 seconds. A reannouncement 
-with an incorrect hash should lead to the announcement being immediately 
-deleted.
+store the announcement indexed by the announcement public key with the 
+lifetime requested up to a maximum of 300 seconds, and then respond with it to 
+any valid Data Retrieve Request for it within its lifetime. After the lifetime 
+has expired, the data should be deleted. A reannouncement with the hash of an 
+undeleted announcement may extend the lifetime of the announcement back to up 
+to 300 seconds. A reannouncement with an incorrect hash should lead to the 
+announcement being immediately deleted.
 
 When choosing what to store within given storage constraints, a node should 
 prefer to store those announcements with public keys closest to the node's DHT 
@@ -515,10 +522,11 @@ be accepted, we also send a Store Announcement request to that node (making
 sure to use the Port/IP that's on the list rather than the source of the Data 
 Search response, to prevent UDP amplification attacks). In this request we put 
 an initial announcement, or a reannouncement if the response indicated that 
-our current announcement is already stored. If we obtain an Announcement Store 
-response from a node indicating that the announcement is stored, we consider 
-ourselves announced to that node, until a Data Search response or further 
-Store Announcement response indicates otherwise.
+our current announcement is already stored. We set the requested timeout to 
+300 seconds. If we obtain an Announcement Store response from a node 
+indicating that the announcement is stored, we consider ourselves announced to 
+that node, until a Data Search response or further Store Announcement response 
+indicates otherwise.
 
 We send Data Search requests once every 3 seconds to nodes on our list which 
 we are not announced to, and once every 120 seconds to those we are announced 
