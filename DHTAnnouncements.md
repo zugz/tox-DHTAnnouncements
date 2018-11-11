@@ -98,9 +98,10 @@ The Ping ID is generated as in the onion: it is the SHA256 hash of some
 per-node secret bytes, the current time rounded to 20s, the searched key in 
 the request, and the requester's DHT public key and sender IP/Port. In the 
 case of a relayed packet (see below), the sender IP/Port is that given in the 
-Route Deliver packet; otherwise, it is the source IP/Port of the packet.
-
-TODO: use HMAC hashes here and throughout?
+Route Deliver packet; otherwise, it is the source IP/Port of the packet. The 
+number of bytes in the representation of the IP/Port should not depend on the 
+IP/Port, so that the length of the data to be hashed is a constant, preventing 
+length extension attacks.
 
 The nodes returned are those closest to the Data Public Key known by the 
 responding node, as in the case of a Nodes Response.
@@ -509,7 +510,10 @@ to.
 
 TODO: backoff; timeouts; handling rejection.
 
-TODO: use fewer announce nodes for long-inactive friends?
+TODO: use fewer announce and search nodes for individual announcements for 
+long-inactive friends? Base on how long we've unsuccessfully searched for the 
+friend, rather than clock time since we last saw them. Only have two settings, 
+to minimise the fingerprint.
 
 # Searching
 For each offline friend, we search for its announcements using Data Search and 
