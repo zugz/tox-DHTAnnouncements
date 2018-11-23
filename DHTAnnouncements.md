@@ -1,18 +1,21 @@
 % DHT Announcements
 
 # Introduction
-This document describes a proposed replacement for the onion.
+Currently, toxcore uses an onion router to attempt to obsecure as much 
+identifying information as possible. The currently implemented onion does not
+satisfactorily. This document describes a proposed replacement for the onion.
 
-This proposal is adapted from an original proposal by Grayhatter
+This proposal is adapted from an original proposal by grayhatter
 <https://wiki.cmdline.org/doku.php?id=dht:new_friend_finding>.
 
-The aim is to permit friends to exchange the connection information necessary 
-to make a direct connection, without revealing their long-term identities to 
-third parties.
+The aim of this specification is to permit friends to exchange the connection 
+information necessary to establish a direct connection, without revealing their
+identities, including but not limited to, long-term keys, identifiable IP 
+addresses, friend networks, etc. to third parties.
 
-The onion also aims to do this, but it makes the assumption that the DHT nodes 
-known to a user are not conspiring. Given the possibility of Sybil and eclipse 
-attacks, this is not a reasonable assumption.
+The onion also aims to do this, but it makes the incorrect assumption that the 
+DHT nodes used by the user are not conspiring, or malicious. Given the 
+possibility of Sybil and eclipse attacks, this is not a reasonable assumption.
 
 See 
 <https://github.com/zugz/tox-alliumSchmallium/raw/master/alliumSchmallium.pdf>
