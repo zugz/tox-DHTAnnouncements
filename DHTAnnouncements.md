@@ -88,11 +88,11 @@ These packets form an RPC DHT Packet pair.
 | `1`         | Int        | Number of nodes in the response (maximum 4) |
 | `[39, 204]` | Node Infos | Nodes in Packed Node Format                 |
 
-The "announcement would be accepted" boolean should be set to true iff a Store 
-Announcement request received now for this data public key would result in the 
-announcement being stored, whatever the size of the announcement (up to the 
-maximum of 512 bytes). This does not consitute a promise to accept a 
-subsequent Store Announcement request.
+The "announcement would be accepted" boolean should be set to true if and only 
+if a Store Announcement request received now for this data public key would 
+result in the announcement being stored, whatever the size of the announcement 
+(up to the maximum of 512 bytes). This does not consitute a promise to accept 
+a subsequent Store Announcement request.
 
 The Ping ID is generated as in the onion: it is the SHA256 hash of some 
 per-node secret bytes, the current time rounded to 20s, the searched key in 
@@ -595,8 +595,8 @@ system either smoothly or sharply.
 Search for pre-existing friends both as above and with the legacy onion 
 system, until they send us a shared signing pubkey.
 
-When adding a friend, use legacy onion method iff there's a nospam, sending a 
-friend request then searching using the onion.
+When adding a friend, use legacy onion method if and only if there's a nospam, 
+sending a friend request then searching using the onion.
 
 Don't announce via the onion at all. Don't generate or expose any nospam.
 
