@@ -25,6 +25,18 @@ See
 for further discussion on the motivation for replacing the onion, and 
 constraints on possible replacements.
 
+## Remark on IP addresses
+
+As with other parts of the tox protocol (namely, finding friends by DHT 
+pubkey, hole punching, and connecting to friends via a TCP server), the DHT 
+Announcements system makes no attempt to prevent third parties from observing 
+pairs of IP addresses being used by tox friends. An attacker with moderate 
+resources could accumulate a lot of such information. To protect against this, 
+users must rely on existing techniques to minimise the extent to which an IP 
+address identifies a user, such as regular permutation of IP addresses within 
+a large pool, mitigation of tracking techniques such as http cookies, and 
+anonymising relays such as Tor or VPNs.
+
 ## User-visible changes
 
 Unlike the onion, DHT Announcements do not support friend requests. Instead, 
