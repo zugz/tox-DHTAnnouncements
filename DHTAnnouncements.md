@@ -96,21 +96,22 @@ These packets form an RPC DHT Packet pair.
 
 #### Data Search Response
 
-| Length      | Type       | Contents                                    |
-|:------------|:-----------|:--------------------------------------------|
-| `32`        | Public Key | Data public key                             |
-| `1`         | Bool       | Data is stored by this node                 |
-| `0 | 32`    | Bytes      | SHA256 of data if stored                    |
-| `32`        | Ping ID    | Ping ID                                     |
-| `1`         | Bool       | Announcement would be accepted              |
-| `1`         | Int        | Number of nodes in the response (maximum 4) |
-| `[39, 204]` | Node Infos | Nodes in Packed Node Format                 |
+| Length     | Type       | Contents                                    |
+|:-----------|:-----------|:--------------------------------------------|
+| `32`       | Public Key | Data public key                             |
+| `1`        | Bool       | Data is stored by this node                 |
+| `0 | 32`   | Bytes      | SHA256 of data if stored                    |
+| `32`       | Ping ID    | Ping ID                                     |
+| `1`        | Byte       | Data types currently accepted               |
+| `1`        | Int        | Number of nodes in the response (maximum 4) |
+| `[0, 204]` | Node Infos | Nodes in Packed Node Format                 |
 
-The "announcement would be accepted" boolean should be set to true if and only 
-if a Store Announcement request received now for this data public key would 
-result in the announcement being stored, whatever the size of the announcement 
-(up to the maximum of 512 bytes). This does not consitute a promise to accept 
-a subsequent Store Announcement request.
+The "data types currently accepted" should have least significant bit set
+if and only if a Store Announcement request received now for this data public 
+key would result in the announcement being stored, whatever the size of the 
+announcement (up to the maximum of 512 bytes). This does not consitute a 
+promise to accept a subsequent Store Announcement request. Other bits are 
+reserved for possible future types of storage request.
 
 The Ping ID is generated as in the onion: it is the SHA256 hash of some 
 
