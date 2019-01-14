@@ -114,9 +114,6 @@ promise to accept a subsequent Store Announcement request. Other bits are
 reserved for possible future types of storage request.
 
 The Ping ID is generated as in the onion: it is the SHA256 hash of some 
-
-The nodes returned are those closest to the Data Public Key known by the 
-responding node, as in the case of a Nodes Response.
 per-node secret bytes, the current time rounded to 20s, the data public key in 
 the request, and the requester's DHT public key and IP/Port. In the case that 
 the request is received as a relayed packet (see below), this IP/Port is the 
@@ -124,6 +121,9 @@ sender IP/Port given in the Route Deliver packet; otherwise, it is the source
 IP/Port of the request packet. The number of bytes in the representation of 
 the IP/Port should not depend on the IP/Port, so that the length of the data 
 to be hashed is a constant, preventing length extension attacks.
+
+The nodes returned are those announce nodes (at most 4) closest to the Data 
+Public Key known by the responding node (see [Finding announce nodes]).
 
 Note: as with Nodes requests, this part of the protocol is susceptible to UDP 
 amplification abuse. Including all overheads (8 bytes for RPC Packet, 72 for 
@@ -576,6 +576,22 @@ of a high rate of requests.
 
 TODO: timeouts.
 
+## Finding announce nodes
+We term as **announce nodes** those DHT nodes who implement the DHT 
+Announcements protocol and who moreover are not behind a restrictive NAT, such 
+that they receive requests sent from arbitrary peers. We maintain an 
+`announce_node` boolean flag on each node in the DHT node lists, indicating 
+whether we consider the node to be an announce node. Whenever we add a node to 
+a DHT node list, we set the flag to false and send the node a Data Search 
+request relayed via a random peer as above, with the data key set to a random 
+key amongst those we are currently searching for or announcing at (or if there 
+are no such, to a random key from the whole space of possible keys). Whenever 
+we receive a Data Search response, we check if the responding host is in a DHT 
+node list, and if so we set its `announce_node` flag. All nodes in lists for 
+announcing and searching described above are considered to be announce nodes. 
+
+When responding to Data Search requests, we give the announce nodes we know 
+closest to the target key (not including ourself).
 
 # Invites
 This section discusses a system allowing a restricted kind of promiscuity, 
@@ -632,12 +648,6 @@ friends using the legacy system uncontactable.
 
 To avoid breaking the onion, we would have to continue to honour onion 
 requests.
-
-We might also have to maintain a separate close list consisting only of peers 
-using the new system, to be used when answering Data Search requests.
-TODO: details. Note we can combine this with "hardening", i.e. ensuring we 
-only respond to data search requests with nodes which appear to be accepting 
-incoming connections from arbitrary hosts.
 
 ## Sharp
 Maybe better just to make a clean break - set up a new onionless network 
