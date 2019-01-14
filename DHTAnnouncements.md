@@ -9,16 +9,16 @@ describes a proposed replacement for onion routing.
 This proposal is adapted from an original proposal by grayhatter
 <https://wiki.cmdline.org/doku.php?id=dht:new_friend_finding>.
 
-The aim of the protocol proposed in this document is to permit friends to 
-exchange the connection information necessary to establish a direct connection 
-between them, without revealing to third parties any information which could 
-be used to identify them. Such information includes their long-term encryption 
-keys and friend networks, but is assumed not to include the IP addresses from 
-which they connect to the tox network.
+The aim of the DHT Announcements protocol described by this document is to 
+permit friends to exchange the connection information necessary to establish a 
+direct connection between them, without revealing to third parties any 
+information which could be used to identify or track them. Such information 
+includes their long-term encryption keys and friend networks, but is assumed 
+*not* to include the IP addresses from which they connect to the tox network.
 
-The onion has similar aims, but it makes the assumption that the DHT nodes 
-used by the user are not conspiring. Given the possibility of Sybil and 
-eclipse attacks, this is not a reasonable assumption.
+The onion routing system has similar aims, but achieves them only under the 
+assumption that the DHT nodes used by the user are not conspiring. Given the 
+possibility of Sybil and eclipse attacks, this is not a reasonable assumption.
 
 See 
 <https://github.com/zugz/tox-alliumSchmallium/raw/master/alliumSchmallium.pdf>
@@ -27,8 +27,8 @@ constraints on possible replacements.
 
 ## User-visible changes
 
-Unlike the onion, this system does not support friend requests. Instead, to 
-add a friend, you must add their ToxID and they must add yours.
+Unlike the onion, DHT Announcements do not support friend requests. Instead, 
+to add a friend, you must add their ToxID and they must add yours.
 
 There is an exception to this for bots, which can be added unilaterally.
 
@@ -41,18 +41,18 @@ There should be considerable bandwidth reductions in typical usage.
 The user's system clock must be reasonably close to the correct time.
 
 ## High-level description of the system
-DHT nodes permit storing small quantities of world-readable data. Using this, 
-we "announce" ourselves by placing our connection info on the DHT for our 
-friends to find. These announcements are encrypted such that only the intended 
-recipient(s) can read it, and signed where appropriate. The DHT locations of 
-these announcements are determined in such a way that the intended recipients 
-can find them, but others can't determine our long-term identity based on the 
-location. To prevent tracking us across sessions based on where we announce, 
-the locations vary with time. When making the first connection with a new 
-friend, the location is derived from the combined key based on our ID 
-keypairs. To keep the costs of announcements under control, for subsequent 
-connections to the friend we announce only to a "shared" announcement location 
-which is used for all such friends.
+DHT nodes permit storing small quantities of world-readable data, termed
+"announcements". Using this, we "announce" ourselves by placing our connection 
+info on the DHT for our friends to find. These announcements are encrypted 
+such that only the intended recipient(s) can read them, and signed where 
+appropriate. The DHT locations of these announcements are determined in such a 
+way that the intended recipients can find them, but others can't determine our 
+long-term identity based on the location. To prevent tracking us across 
+sessions based on where we announce, the locations vary with time. When making 
+the first connection with a new friend, the location is derived from the 
+combined key based on our ID keypairs. To keep the costs of announcements 
+under control, for subsequent connections to the friend we announce only to a 
+"shared" announcement location which is used for all such friends.
 
 In a separate mode intended for bots, peers can also announce at a "public" 
 announcement location which is just the peers's ID public key, giving up all 
@@ -101,22 +101,44 @@ result in the announcement being stored, whatever the size of the announcement
 a subsequent Store Announcement request.
 
 The Ping ID is generated as in the onion: it is the SHA256 hash of some 
-per-node secret bytes, the current time rounded to 20s, the searched key in 
-the request, and the requester's DHT public key and sender IP/Port. In the 
-case of a relayed packet (see below), the sender IP/Port is that given in the 
-Route Deliver packet; otherwise, it is the source IP/Port of the packet. The 
-number of bytes in the representation of the IP/Port should not depend on the 
-IP/Port, so that the length of the data to be hashed is a constant, preventing 
-length extension attacks.
 
 The nodes returned are those closest to the Data Public Key known by the 
 responding node, as in the case of a Nodes Response.
+per-node secret bytes, the current time rounded to 20s, the data public key in 
+the request, and the requester's DHT public key and IP/Port. In the case that 
+the request is received as a relayed packet (see below), this IP/Port is the 
+sender IP/Port given in the Route Deliver packet; otherwise, it is the source 
+IP/Port of the request packet. The number of bytes in the representation of 
+the IP/Port should not depend on the IP/Port, so that the length of the data 
+to be hashed is a constant, preventing length extension attacks.
 
 Note: as with Nodes requests, this part of the protocol is susceptible to UDP 
 amplification abuse. Including all overheads (8 bytes for RPC Packet, 72 for 
 DHT Packet, 8 for UDP header, 20 for IPv4 header), the minimum size of a 
 request is 140 bytes, and the maximum size of a response is 411 bytes, giving 
 an amplification ratio of 2.9. Hopefully not high enough to be useful.
+
+### Data Retrieve Request and Response
+These packets form an RPC DHT Packet pair.
+
+#### Data Retrieve Request
+| Length | Type       | Contents        |
+|:-------|:-----------|:----------------|
+| `32`   | Public Key | Data public key |
+| `32`   | Ping ID    | Ping ID         |
+
+The Ping ID should be set to the Ping ID obtained from a recent Data Search 
+response to a search for the same data public key, as above. This check is to 
+prevent redirection of the response to a forged IP address, which could be 
+used for a UDP amplification attack.
+
+#### Data Retrieve Response
+| Length | Type       | Contents        |
+|:-------|:-----------|:----------------|
+| `32`   | Public Key | Data public key |
+| `1`    | Bool       | Data found      |
+| `[0,]` | Bytes      | Data            |
+
 
 ### Store Announcement Request and Response
 These packets form an RPC DHT Packet pair.
@@ -171,32 +193,11 @@ announcement.
 The stored time is 0 if the announcement request was rejected, else the time 
 in seconds that the announcement will be stored for.
 
-### Data Retrieve Request and Response
-These packets form an RPC DHT Packet pair.
-
-#### Data Retrieve Request
-| Length | Type       | Contents        |
-|:-------|:-----------|:----------------|
-| `32`   | Public Key | Data public key |
-| `32`   | Ping ID    | Ping ID         |
-
-The Ping ID should be set to the Ping ID obtained from a recent Data Search 
-Response to a search for the same data public key, as above. This check is to 
-prevent redirection of the response to a forged IP address, which could be 
-used for a UDP amplification attack.
-
-#### Data Retrieve Response
-| Length      | Type       | Contents        |
-|:------------|:-----------|:----------------|
-| `32`        | Public Key | Data public key |
-| `1`         | Bool       | Data found      |
-| `[0,512]`   | Bytes      | Data            |
-
 ### Storing announcements
-Memory permitting, a DHT node should accept any Store Announcement Request and 
+Memory permitting, a DHT node should accept any Store Announcement request and 
 store the announcement indexed by the announcement public key with the 
 lifetime requested up to a maximum of 900 seconds, and then respond with it to 
-any valid Data Retrieve Request for it within its lifetime. After the lifetime 
+any valid Data Retrieve request for it within its lifetime. After the lifetime 
 has expired, the data should be deleted. A reannouncement with the hash of an 
 undeleted announcement may extend the lifetime of the announcement to up to 
 900 seconds. A reannouncement with an incorrect hash should lead to the 
@@ -237,9 +238,9 @@ This is sent as the payload of a Protocol packet.
 
 The IP/Port is as in packed node format.
 
-On receiving a Route Request packet, we send a Route Deliver packet to the 
-addressee IP/Port with Sender IP/Port the source of the current packet, and 
-data copied from that in the current packet.
+On receiving a Route Request packet, a DHT node should send a Route Deliver 
+packet to the addressee IP/Port with Sender IP/Port the source of the current 
+packet, and data copied from that in the current packet.
 
 #### Route Deliver Packet
 This is sent as the payload of a Protocol packet.
@@ -250,8 +251,9 @@ This is sent as the payload of a Protocol packet.
 | `[7,]` | Data          | Encrypted payload |
 
 The symmetric key should be randomly generated by the sender, and the payload 
-should be encrypted with this symmetric key and the zero nonce. The encryption 
-algorithm is xsalsa20, as provided by `crypto_stream_xor` in NaCl.
+should be encrypted with this symmetric key and the zero nonce, using the 
+encryption algorithm XSalsa20 (provided by `crypto_stream_xor` in NaCl and by 
+`crypto_secretbox_detached` in libsodium).
 
 The purpose of this encryption is to prevent well-crafted route requests 
 causing the router to send packets which might be interpreted by other 
@@ -267,7 +269,7 @@ Payload:
 On receiving a Route Deliver packet and decrypting the payload, we attempt to 
 handle the data as a DHT packet containing one of the request packets 
 associated with the announcement system defined above. If a response is 
-generated, it should be sent via a Route Request packet sent to the source of 
+generated, it should be sent via a Route request packet sent to the source of 
 the current packet, addressed to the Sender IP/Port in the payload of the 
 current packet.
 
@@ -279,7 +281,7 @@ current packet.
 | `[0,]`   | Bytes     | Data              |
 
 This is sent to a TCP server by a TCP client in an encrypted data packet. The 
-TCP server should treat it as a Route Request, but the information put in the 
+TCP server should treat it as a Route request, but the information put in the 
 sender IP/Port of the Deliver packet should identify the client to the server 
 (as is currently done for TCP onion packets).
 
@@ -289,11 +291,10 @@ sender IP/Port of the Deliver packet should identify the client to the server
 | `1`    | `uint8_t` | 0x0b     |
 | `[0,]` | Bytes     | Data     |
 
-This is sent by a TCP server to a TCP client in an encrypted data packet, when 
+This is sent by a TCP server to a TCP client in an encrypted data packet when 
 the server obtains a Route request with Addressee IP/Port referring to the 
 client, according to the scheme used by that server when handling TCP Route 
-Requests.
-
+requests.
 
 # Announcing connection info
 We use announcements to store our timestamped connection info on the DHT in 
@@ -324,22 +325,22 @@ Suggested values:
     M = 1200
     P = 4096
 
-We set **node time** to be unix time as given by our system clock plus a 
+We define **node time** to be unix time as given by our system clock plus a 
 random error distributed uniformly in $[E,-E]$. The random error should 
 generated along with the DHT key, and have the same period of validity.
 
-At a given time, we generate two **timed hashes** of a bytestring 'input' as 
-follows.
+At a given time, two **timed hashes** of a bytestring `input` (of length at 
+least 8 bytes) are defined as follows.
 
 Let `node_time` be node time as an unsigned 64 bit integer,
-let `offset` be the last 8 bytes of input interpreted as a big-endian unsigned 
-64 bit integer,
+let `offset` be the last 8 bytes of `input` interpreted as a big-endian 
+unsigned 64 bit integer,
 define
 
-    rounded_time := (node_time + offset + (-1)^n M/2) / P
+    rounded_time := (node_time + offset + n*M) / P
 
 where n is 0 for the first timed hash and 1 for the second,
-and addition is modulo 2^64,
+and addition is modulo $2^{64}$,
 and finally define the timed hash as
 
     SHA256(input, rounded_time) .
@@ -350,7 +351,7 @@ Suppose A and B simultaneously compute timed hashes of the same input.
 As long as the difference between A's clock and B's clock is less than $M-2E$, 
 the timed hashes they generate will always have a hash in common.
 More generally, if the difference between their node times is $dt$, then they 
-generate common hashes
+generate no common hash
 
     max(0, min(1, (dt - M) / P))
 
@@ -388,7 +389,7 @@ their clock drift and clock precision).
 ## Individual announcements
 If A and B are peers, A's **individual announcement** for B consists of a 
 random 24-byte nonce followed by A's timestamped connection info, 
-authenticated and encrypted using the nonce and the combined key of A and B.
+authenticated and encrypted using that nonce and the combined key of A and B.
 
 This is announced with announcement secret key(s) the timed hashes of the 
 48-byte authenticated encryption of A's ID pubkey, encrypted with the combined 
@@ -416,8 +417,9 @@ shared with anyone except as described above.
 Our **shared announcement** consists of a random nonce followed by our 
 timestamped connection info signed with our shared signing keypair, and then 
 encrypted with the nonce using the shared signing public key as a symmetric 
-encryption key. The symmetric encryption algorithm is XSalsa20 (exposed as 
-`crypto_stream_xor` in NaCl and as `crypto_secretbox_detached` in libsodium).
+encryption key. The symmetric encryption algorithm for this purpose is 
+XSalsa20 (exposed as `crypto_stream_xor` in NaCl and as 
+`crypto_secretbox_detached` in libsodium).
 
 The encryption prevents the node where the announcement is stored from reading 
 the announcement (which may contain information, such as timestamps and our 
@@ -443,17 +445,20 @@ Our friends can also easily determine our other friends' IP addresses and DHT
 pubkeys by listening at the shared announcement pubkey.
 
 ## Public announcements and promiscuity
+TODO: put this and invites in a single section, and discuss possibility of
+combining them.
+
 A Tox instance may be set (as an option at initialisation) to "promiscuous 
 mode". This is intended primarily for bots.
 
 A Tox instance P running in promiscuous mode functions as follows. On first 
 run, it generates an Ed25519 signing keypair and derives (see below) its 
-Curve25519 ID keypair from it. This keypair is saved across sessions. P's 
-**public announcement** consists of P's timestamped connection info signed 
-with this keypair, announced with P's ID secret key as the announcement secret 
-key.
+long-term Curve25519 ID keypair from it. The signing keypair is saved across 
+sessions. P's **public announcement** consists of P's timestamped connection 
+info signed with this keypair, announced with P's ID secret key as the 
+announcement secret key.
 
-This public signing key can be distributed publically, with a prefix to 
+The public signing key can be distributed publically, with a prefix to 
 distinguish it from an ordinary ToxID, say as
 
     s:BA155D19285AEFA10BF5D409FFCA513FDF8B356260CF98B9C1D212CAD367424A
@@ -467,7 +472,7 @@ B as a friend (after consulting a callback) and accepts the handshake.
 
 While in promiscous mode, shared signing keys are not sent to friends by 
 default (but this can be overriden with an API call). When B adds a public 
-signing key for an existing friend, B deletes any shared signing key they are 
+signing key for an existing friend, B deletes any shared signing key B is 
 storing for the friend.
 
 Promiscuous mode is not to be advised for ordinary users, as it negates all 
@@ -483,7 +488,9 @@ NaCl does not currently provide corresponding functions, so we have to either
 implement them ourselves (which is straightforward in theory) or require 
 libsodium.
 
-# Making announcements
+# Announcing and searching
+
+## Making announcements
 As described above, at any time we want to maintain various announcements at 
 various announcement secret keys. In fact, the typical case will be a single 
 such announcement - a shared announcement at the common timed hash of our 
@@ -521,7 +528,7 @@ long-inactive friends? Base on how long we've unsuccessfully searched for the
 friend, rather than clock time since we last saw them. Only have two settings, 
 to minimise the fingerprint.
 
-# Searching
+## Searching
 For each offline friend, we search for its announcements using Data Search and 
 Data Retrieve requests, relayed via random DHT nodes / TCP servers we are 
 connected to.
