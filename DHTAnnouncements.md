@@ -630,30 +630,15 @@ codes. Preferably there would also be an indication of any active invite codes
 and the option to cancel them or extend their validity.
 
 # Migration
-We could aim to transition from the onion system to this new friend finding 
-system either smoothly or sharply.
+To ensure backwards compatibility, we continue to process onion packets as 
+usual, and moreover we search on the onion for offline friends who might still 
+be announcing on the onion. For an existing friend, we consider this to be the 
+case until they send us a shared signing pubkey. When adding a friend, we 
+consider it to be the case if and only if the added ID includes a nospam, and 
+when it does we also send a friend request.
 
-## Smooth
-Search for pre-existing friends both as above and with the legacy onion 
-system, until they send us a shared signing pubkey.
+We don't announce via the onion, nor generate or expose any nospam.
 
-When adding a friend, use legacy onion method if and only if there's a nospam, 
-sending a friend request then searching using the onion.
-
-Don't announce via the onion at all. Don't generate or expose any nospam.
-
-Make onion a compile-time option, which we can eventually switch off by 
-default, and a client option, which can be disabled at the cost of rendering 
-friends using the legacy system uncontactable.
-
-To avoid breaking the onion, we would have to continue to honour onion 
-requests.
-
-## Sharp
-Maybe better just to make a clean break - set up a new onionless network 
-disconnected from the existing one, to be used only by devs and the 
-adventurous at first while we experiment. Old network will persist 
-independently, dying slowly as users upgrade.
-
-The problem of course is that network effects may lead many current users to 
-avoid upgrading, because they have friends who haven't upgraded. Tricky.
+Preferably, clients should indicate which friends are using the legacy onion 
+system, and warn the user of the privacy implications of this (so they exhort 
+their friends to upgrade).
