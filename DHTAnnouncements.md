@@ -514,32 +514,43 @@ requests, relayed via random DHT nodes / TCP servers we are connected to.
 
 The details are similar to those of onion announcements. For each announcement 
 we wish to make, we maintain a list of the 8 DHT nodes closest to the 
-announcement public key we have found. We periodically send Data Search 
-requests to these. When we receive a Data Search response, we send further 
-Data Search requests to the nodes given in Data Search responses if they could 
-be added to the list, and add them if they respond. When we receive a Data 
-Search response from a node which is already on the list indicating that our 
-current announcement is not stored but that a Store Announcement request would 
-be accepted, we also send a Store Announcement request to that node (making 
-sure to use the Port/IP that's on the list rather than the source of the Data 
-Search response, to prevent UDP amplification attacks). In this request we put 
-an initial announcement, or a reannouncement if the response indicated that 
-our current announcement is already stored. We set the requested timeout to 
-300 seconds. If we obtain an Announcement Store response from a node 
-indicating that the announcement is stored, we consider ourselves announced to 
-that node, until a Data Search response or further Store Announcement response 
-indicates otherwise.
+announcement public key we have found.
 
-We send Data Search requests once every 3 seconds to nodes on our list which 
-we are not announced to, and once every 120 seconds to those we are announced 
-to.
+Initially, and whenever the list is not full, it is populated with random 
+announce nodes from the DHT node lists.
 
-TODO: backoff; timeouts; handling rejection.
+We periodically send Data Search requests to the nodes on the list. When we 
+receive a Data Search response, we try to add the sender to the list, and we 
+send further Data Search requests to any nodes given in the response which 
+could be added to the list. When we receive a Data Search response from a node 
+which is already on the list indicating that our current announcement is 
+stored or that a Store Announcement request would be accepted, we also send a 
+Store Announcement request to that node (making sure to use the Port/IP that's 
+on the list rather than the source of the Data Search response, to prevent UDP 
+amplification attacks). In this request we put an initial announcement, or a 
+reannouncement if the response indicated that our current announcement is 
+already stored. We set the requested timeout to 300 seconds. If we obtain an 
+Announcement Store response from a node indicating that the announcement is 
+stored, we consider ourselves announced to that node, until a Data Search 
+response or further Store Announcement response indicates otherwise.
 
-TODO: use fewer announce and search nodes for individual announcements for 
-long-inactive friends? Base on how long we've unsuccessfully searched for the 
-friend, rather than clock time since we last saw them. Only have two settings, 
-to minimise the fingerprint.
+The interval between sending Data Search requests to a node on our list is 120 
+seconds if we are announced to it, and otherwise is
+
+    min(120,3n)
+
+where n is a count of the number of Data Search requests which have been sent 
+to the node, set to 0 when the node is added to the list, and set to 1 when we 
+discover from a Data Search response that we are no longer announced there.
+
+A node on the list which fails to respond to 3 consecutive Data Search 
+requests is removed from the list.
+
+We keep track of the total amount of time we have spent announcing for at a 
+given individual key without a connection to the corresponding friend being 
+made, saving across sessions. Once this exceeds 64 hours, we switch to a low 
+intensity mode, simply meaning that we use a list of nodes of length 1 rather 
+than 8.
 
 ## Searching
 For each offline friend, we search for its announcements using Data Search and 
@@ -573,8 +584,6 @@ Because it is possible that we have an outdated shared signing key for the
 friend, when we search for the shared announcement we also search for the 
 individual announcement, with the same process but without the initial period 
 of a high rate of requests.
-
-TODO: timeouts.
 
 ## Finding announce nodes
 We term as **announce nodes** those DHT nodes who implement the DHT 
