@@ -319,14 +319,21 @@ was last updated, followed by our connection info. The timestamp should change
 only when the connection info changes.
 
 There are three kinds of announcement: individual announcements, shared 
-announcements, and public announcements. The differences are in how the 
+announcements, and invite announcements. The differences are in how the 
 announcement keypair is determined and in how the connection info is encrypted 
 and/or signed in the announcement.
 
 The intention is that the intended parties can be assured that what is 
-announced really is our current connection info, and yet (for non-public 
-announcements) no-one else can link the announcement to our long-term ID, nor 
-track changes to our DHT pubkey and IP address across sessions.
+announced really is our current connection info, and yet no-one else can link 
+the announcement to our long-term ID, nor track changes to our DHT pubkey and 
+IP address across sessions.
+
+In fact, only individual announcements are required for core functionality, 
+and a first implementation could reasonably ignore shared and invite 
+announcements. The purpose of shared announcements is to keep network traffic 
+requirements under control. The purpose of invite announcements is to allow 
+"promiscuity", which is required for public bots and can simplify the process 
+of adding friends.
 
 ## Timed hashes
 Fix constants $E < M < P$ ("error", "margin", and "period"), measured in 
@@ -457,49 +464,70 @@ inevitable.
 Our friends can also easily determine our other friends' IP addresses and DHT 
 pubkeys by listening at the shared announcement pubkey.
 
-## Public announcements and promiscuity
-TODO: put this and invites in a single section, and discuss possibility of
-combining them.
+## Invite announcements
+An **invite code** is the public key of an Ed25519 signing keypair. A 
+corresponding **invite announcement** is made exactly as in the case of a 
+shared announcement.
 
-A Tox instance may be set (as an option at initialisation) to "promiscuous 
-mode". This is intended primarily for bots.
+We adapt the handshake packet to allow an invite code to be included at the 
+end of the encrypted part. We then add as a friend anyone who sends us a 
+handshake which specifies a valid invite code.
 
-A Tox instance P running in promiscuous mode functions as follows. On first 
-run, it generates an Ed25519 signing keypair and derives (see below) its 
+The intention is that we generate an invite code and send it out-of-band along 
+with our ID pubkey to some limited set of people. A common instance of this is 
+asking someone who does not use tox to install it and find you on the network. 
+
+In terms of friend requests, an invite announcement is analagous to giving out 
+a ToxID with a nospam and accepting every friend request obtained without 
+checking the sender.
+
+A time limit on the validity of an invite code and/or the number of peers who 
+can use it could be set; 1 day and 1 peer might be sensible defaults.
+
+One big problem with invite announcements is that it is difficult to explain 
+to the user the privacy consequences of the invite code being leaked. This 
+could be mitigated somewhat by warning against loose time/user limits. Another 
+problem is the additional complexity in the user interface - it would require 
+a means to supply an invite code on adding a friend (while making it clear 
+that supplying one might not be necessary), and a means to generate invite 
+codes. Preferably there would also be an indication of any active invite codes 
+and the option to cancel them or extend their validity.
+
+### Public announcements
+Public bots typically want to accept all connections. This can be implemented 
+by distributing an invite code with no limit on its validity. We term as 
+**public announcements** the corresponding invite announcements.
+
+A naive implementation would mean potential users of a bot have to input both 
+its ID pubkey and its invite code. However, this can be shortcut by deriving 
+one public key from the other. Theoretically this could work either way round, 
+but libsodium only provides functions for deriving Curve25519 keypairs from 
+Ed25519 keypairs, so we consider that direction. It could work as follows.
+
+On first run, the bot generates an Ed25519 signing keypair and derives its 
 long-term Curve25519 ID keypair from it. The signing keypair is saved across 
-sessions. P's **public announcement** consists of P's timestamped connection 
-info signed with this keypair, announced with P's ID secret key as the 
-announcement secret key.
+sessions.
 
 The public signing key can be distributed publically, with a prefix to 
 distinguish it from an ordinary ToxID, say as
 
-    s:BA155D19285AEFA10BF5D409FFCA513FDF8B356260CF98B9C1D212CAD367424A
+    p:BA155D19285AEFA10BF5D409FFCA513FDF8B356260CF98B9C1D212CAD367424A .
 
-. When this string is given in another Tox client, B, as a friend to be added, 
-B will derive P's ID pubkey from it and search for P's public announcement. 
-When B finds it and confirms the signature, and so obtains P's timestamped 
-connection info, as usual B will send a handshake to P. Normally, P would 
-reject it as not coming from a friend; but in promiscuous mode, instead P adds 
-B as a friend (after consulting a callback) and accepts the handshake.
+When a user gives such a string to a Tox client as a friend to be added, the 
+client should interpret the part after the prefix as a key and deliver it to a 
+new API function, which interprets it as an invite code for the Curve25519 ID 
+pubkey derived from it.
 
-While in promiscous mode, shared signing keys are not sent to friends by 
-default (but this can be overriden with an API call). When B adds a public 
-signing key for an existing friend, B deletes any shared signing key B is 
-storing for the friend.
-
-Promiscuous mode is not to be advised for ordinary users, as it negates all 
-privacy properties: anyone may find the IP address and DHT pubkey of a 
-promiscuous node given its ID pubkey.
-
-### Deriving encryption keys from signing keys
-In libsodium, this functionality is provided by 
+In libsodium, the relevant key derivation functions are 
 `crypto_sign_ed25519_sk_to_curve25519()`
 and `crypto_sign_ed25519_pk_to_curve25519()`.
-
 NaCl does not currently provide corresponding functions, so we have to either 
 implement them ourselves (which is straightforward in theory) or require 
 libsodium.
+
+When someone connects to us via a public announcement, we do not send them our 
+shared signing key; as a result, they will continue to use the public 
+announcement to find us in future, and we need make no other announcement.
 
 # Announcing and searching
 
@@ -558,7 +586,7 @@ Data Retrieve requests, relayed via random DHT nodes / TCP servers we are
 connected to.
 
 We search for the friend's shared announcement if we have a shared signing key 
-for it, else for its public announcement if we have its public signing key, 
+for it, else for its invite announcement if we have an invite code for it, 
 else for the individual announcement.
 
 We ensure we are announced for the friend before beginning to search for it.
@@ -601,42 +629,6 @@ announcing and searching described above are considered to be announce nodes.
 
 When responding to Data Search requests, we give the announce nodes we know 
 closest to the target key (not including ourself).
-
-# Invites
-This section discusses a system allowing a restricted kind of promiscuity, 
-which could be implemented on top of the system described above.
-
-An **invite code** is the public key of an Ed25519 signing keypair. A 
-corresponding **invite announcement** is made exactly as in the case of a 
-shared announcement.
-
-We adapt the handshake packet to allow an invite code to be included at the 
-end of the encrypted part. We then add as a friend anyone who sends us a 
-handshake which specifies a valid invite code.
-
-The intention is that we generate an invite code and send it out-of-band along 
-with our ID pubkey to some limited set of people. A common instance of this is 
-asking someone who does not use tox to install it and find you on the network. 
-
-In terms of friend requests, an invite announcement is analagous to giving out 
-a ToxID with a nospam and accepting every friend request obtained without 
-checking the sender.
-
-A time limit on the validity of an invite code and/or the number of peers who 
-can use it could be set; 1 day and 1 peer might be sensible defaults.
-
-With no such limits, an invite announcement plays the same role as a public 
-announcement, except that both the ID pubkey and the invite code have to be 
-distributed.
-
-One big problem with invite announcements is that it is difficult to explain 
-to the user the privacy consequences of the invite code being leaked. This 
-could be mitigated somewhat by warning against loose time/user limits. Another 
-problem is the additional complexity in the user interface - it would require 
-a means to supply an invite code on adding a friend (while making it clear 
-that supplying one might not be necessary), and a means to generate invite 
-codes. Preferably there would also be an indication of any active invite codes 
-and the option to cancel them or extend their validity.
 
 # Migration
 To ensure backwards compatibility, we continue to process onion packets as 
