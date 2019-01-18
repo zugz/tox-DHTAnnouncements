@@ -8,7 +8,7 @@
 	pandoc -t beamer $< -V colortheme:seagull -o $@
 
 %.pdf: %.md
-	pandoc $< -o $@
+	pandoc $< -o $@ --toc -N
 
 %.html: %.md
 	pandoc $< -o $@
@@ -24,5 +24,7 @@
 #%.bbl: %.bib %.aux
 #	bibtex $(<:%.bib=%)
 
-test: alliumSchmallium.pdf
+pdf: DHTAnnouncements.pdf
+
+test: DHTAnnouncements.pdf
 	fbpdf $<

@@ -34,17 +34,19 @@ pairs of IP addresses being used by tox friends. An attacker with moderate
 resources could accumulate a lot of such information. To protect against this, 
 users must rely on existing techniques to minimise the extent to which an IP 
 address identifies a user, such as regular permutation of IP addresses within 
-a large pool, mitigation of tracking techniques such as http cookies, and 
+a large pool, mitigation of tracking techniques like http cookies, and 
 anonymising relays such as Tor or VPNs.
 
 ## User-visible changes
 
 Unlike the onion, DHT Announcements do not support friend requests. Instead, 
-to add a friend, you must add their ToxID and they must add yours.
+to add a friend, you add their ToxID and they add yours.
 
-There is an exception to this for bots, which can be added unilaterally.
+Alternatively, you can create an 'invite code' and send it out-of-band to a 
+friend, who can then use it to add you without you having to know their ToxID.
+Similarly, bots can set things up so that anyone can add them.
 
-This system does not use any "nospam" - the ToxID of a peer is just their 
+This system does not use any "nospam" -- the ToxID of a peer is just their 
 long-term ID public key. This makes it easy to introduce existing friends to 
 each other.
 
@@ -361,9 +363,7 @@ define
 
 where n is 0 for the first timed hash and 1 for the second,
 and addition is modulo $2^{64}$,
-and finally define the timed hash as
-
-    SHA256(input, rounded_time) .
+and finally define the timed hash as `SHA256(input, rounded_time)`.
 
 The two timed hashes will differ $M/P$ of the time.
 
@@ -371,11 +371,7 @@ Suppose A and B simultaneously compute timed hashes of the same input.
 As long as the difference between A's clock and B's clock is less than $M-2E$, 
 the timed hashes they generate will always have a hash in common.
 More generally, if the difference between their node times is $dt$, then they 
-generate no common hash
-
-    max(0, min(1, (dt - M) / P))
-
-of the time.
+generate no common hash `max(0, min(1, (dt - M) / P))` of the time.
 
 Note that if P is not a power of 2, the wraparound at `UINT64_MAX` would cause 
 some timed hashes to have exceptionally short validity, potentially leaking 
@@ -454,7 +450,7 @@ our current shared signing pubkey, and we make individual announcements for
 each of our other friends.
 
 ### Security notes
-Our friends can interfere with our shared announcements - either by occupying 
+Our friends can interfere with our shared announcements -- either by occupying 
 the neighbourhood of the announcement pubkey on the DHT and behaving 
 maliciously (e.g. accepting our announce requests but not actually storing the 
 announce), or simply by overwriting our announcements. The latter technique 
@@ -481,17 +477,17 @@ In terms of friend requests, an invite announcement is analagous to giving out
 a ToxID with a nospam and accepting every friend request obtained without 
 checking the sender.
 
-A time limit on the validity of an invite code and/or the number of peers who 
-can use it could be set; 1 day and 1 peer might be sensible defaults.
+Invite codes can have validity limited in time and in the number of peers who 
+can use it; 1 day and 1 peer might be sensible defaults.
 
 One big problem with invite announcements is that it is difficult to explain 
 to the user the privacy consequences of the invite code being leaked. This 
 could be mitigated somewhat by warning against loose time/user limits. Another 
-problem is the additional complexity in the user interface - it would require 
-a means to supply an invite code on adding a friend (while making it clear 
-that supplying one might not be necessary), and a means to generate invite 
-codes. Preferably there would also be an indication of any active invite codes 
-and the option to cancel them or extend their validity.
+problem is the additional complexity in the user interface -- it requires a 
+means to supply an invite code on adding a friend (while making it clear that 
+supplying one might not be necessary), and a means to generate invite codes. 
+Preferably there would also be an indication of any active invite codes and 
+the option to cancel them or extend their validity.
 
 ### Public announcements
 Public bots typically want to accept all connections. This can be implemented 
@@ -527,25 +523,27 @@ libsodium.
 
 When someone connects to us via a public announcement, we do not send them our 
 shared signing key; as a result, they will continue to use the public 
-announcement to find us in future, and we need make no other announcement.
+announcement to find us in the future, and we need make no other announcement.
 
 # Announcing and searching
 
 ## Making announcements
 As described above, at any time we want to maintain various announcements at 
 various announcement secret keys. In fact, the typical case will be a single 
-such announcement - a shared announcement at the common timed hash of our 
+such announcement -- a shared announcement at the common timed hash of our 
 shared public key.
 
 We make and maintain an announcement using Data Search and Store Announcement 
 requests, relayed via random DHT nodes / TCP servers we are connected to.
 
-The details are similar to those of onion announcements. For each announcement 
-we wish to make, we maintain a list of the 8 DHT nodes closest to the 
-announcement public key we have found.
+The details are similar to those of onion announcements. Some of the constants 
+suggested here are based on those used in the onion, while others are based on 
+intuition, and all should be fine-tuned.
 
-Initially, and whenever the list is not full, it is populated with random 
-announce nodes from the DHT node lists.
+For each announcement we wish to make, we maintain a list of the 8 DHT nodes 
+closest to the announcement public key we have found. Initially, and whenever 
+the list is not full, it is populated with random announce nodes from the DHT 
+node lists (see [Finding announce nodes]).
 
 We periodically send Data Search requests to the nodes on the list. When we 
 receive a Data Search response, we try to add the sender to the list, and we 
@@ -563,22 +561,20 @@ stored, we consider ourselves announced to that node, until a Data Search
 response or further Store Announcement response indicates otherwise.
 
 The interval between sending Data Search requests to a node on our list is 120 
-seconds if we are announced to it, and otherwise is
-
-    min(120,3n)
-
-where n is a count of the number of Data Search requests which have been sent 
-to the node, set to 0 when the node is added to the list, and set to 1 when we 
-discover from a Data Search response that we are no longer announced there.
+seconds if we are announced to it, and otherwise is `min(120,3n)` where `n` is 
+a count of the number of Data Search requests which have been sent to the 
+node, set to 0 when the node is added to the list, and set to 1 when we are 
+informed by a Data Search response from the node that we are no longer 
+announced at the node.
 
 A node on the list which fails to respond to 3 consecutive Data Search 
 requests is removed from the list.
 
-We keep track of the total amount of time we have spent announcing for at a 
-given individual key without a connection to the corresponding friend being 
-made, saving across sessions. Once this exceeds 64 hours, we switch to a low 
-intensity mode, simply meaning that we use a list of nodes of length 1 rather 
-than 8.
+We keep track of the total amount of time we have spent announcing at a given 
+individual key without a connection to the corresponding friend being made, 
+saving across sessions. Once this exceeds 64 hours, we switch to a low 
+intensity mode; this simply means that we use a list of nodes of length 1 
+rather than 8.
 
 ## Searching
 For each offline friend, we search for its announcements using Data Search and 
@@ -641,5 +637,5 @@ when it does we also send a friend request.
 We don't announce via the onion, nor generate or expose any nospam.
 
 Preferably, clients should indicate which friends are using the legacy onion 
-system, and warn the user of the privacy implications of this (so they exhort 
-their friends to upgrade).
+system, and warn the user of the privacy implications of this (so the user 
+will exhort their friends to upgrade).
