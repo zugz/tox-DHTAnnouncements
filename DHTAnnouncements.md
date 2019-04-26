@@ -325,9 +325,12 @@ was last updated, followed by our connection info. The timestamp should change
 only when the connection info changes.
 
 There are three kinds of announcement: individual announcements, shared 
-announcements, and invite announcements. The differences are in how the 
-announcement keypair is determined and in how the connection info is encrypted 
-and/or signed in the announcement.
+announcements, and invite announcements. In each case, an announcement secret 
+key will be obtained by combining the time of the announcement with a secret 
+shared only by those the announcement is intended for, and the announcement 
+public key will be that derived from the secret key. The differences are in 
+the choice of secret, and in how the connection info is encrypted and/or 
+signed in the announcement.
 
 The intention is that the intended parties can be assured that what is 
 announced really is our current connection info, and yet no-one else can link 
@@ -446,8 +449,8 @@ the announcement (which may contain information, such as timestamps and our
 choice of TCP relays, which might be used to identify us), while the signature 
 prevents our friends from faking an announcement for us.
 
-Our shared announcement is announced with secret key(s) the timed hashes of 
-our shared signing pubkey.
+Our shared announcement is announced with announcement secret key(s) the timed 
+hashes of our shared signing pubkey.
 
 We make a shared announcement as long as at least one friend is known to have 
 our current shared signing pubkey, and we make individual announcements for 
