@@ -93,19 +93,15 @@ case of announcements, we refer to this as the Announcement Public Key, for
 which the announcer should have the corresponding Announcement Secret Key.
 
 ### Timed authenticators
-A "timed authenticator" (or "Timed Auth") is a 32-byte bytestring used as a 
-time-limited authorisation token. Its precise construction need not be 
-considered part of the protocol, since it need only to be verifiable by its 
-setter, so the following definition should be considered a guideline.
+The **timed authenticator** (or **Timed Auth**) of a bytestring with a certain 
+timeout `timeout` is the 32-byte HMAC-SHA-512256 authenticator of the 
+concatenation of `unix_time/timeout` as a `uint64_t` and the bytestring, using 
+a secret key held for this exclusive purpose.
 
-The **timed authenticator** of a bytestring is the HMAC-SHA-512256 
-authenticator of the concatenation of `unix_time/20` as a `uint64_t` and the 
-bytestring, using a secret key held for this exclusive purpose.
-
-To verify a purported timed authenticator of some data, a node uses their 
+To verify a purported timed authenticator of a bytestring, a node uses their 
 secret key to generate the timed authenticator for the current time and also 
-that for 20 seconds prior, and considers the authenticator valid if it is 
-equal to either of these.
+that for `timeout` seconds prior, and considers the authenticator valid if it 
+is equal to either of these.
 
 ### Data Search Request and Response
 These packets form an RPC DHT Packet pair.
@@ -135,9 +131,11 @@ promise to accept a subsequent Store Announcement request. Other bits are
 reserved for possible future types of storage request.
 
 The Timed Auth is the timed authenticator of the concatenation of the data 
-public key in the request, the requester's DHT public key, and the source 
-IP/Port. In the case that the request is received as a forwarded packet (see 
-below), this IP/Port is that of the forwarder.
+public key in the request, the requester's DHT public key, the source IP/Port, 
+and, in the case that the request is received as a forwarded packet (see 
+below), the sendback.
+
+The timeout of this timed authenticator is 60s.
 
 The nodes returned are those announce nodes (at most 4) closest to the Data 
 Public Key known by the responding node (see [Finding announce nodes]).
@@ -245,75 +243,119 @@ the purposes of the protocol, rather than that the information must be
 securely erased.
 
 ### Forwarding
-For various reasons, it may be that there are DHT nodes which we are not able 
-to connect to though they are generally accessible, and conversely there may 
-be nodes which we are able to connect to but which do not generally accept 
-incoming connections. In particular, we may not be able to use UDP at all. We 
-deal with these problems by relaying our announcement and search requests via 
-third parties.
-
-This is similar to the onion, but with only one hop.
+For various reasons, peers differ in which DHT nodes they are able to connect 
+to. In particular, the close list of a DHT node may well include nodes which 
+are behind NAT and can't be accessed by most peers. So to reduce the effect 
+that our position in the DHT has on which announce nodes we find, instead of 
+sending a request directly to a potential announce node, we relay the request 
+via a DHT node close to it.
 
 To avoid terminological collision with TCP relays, we refer to this as 
 "forwarding" rather than "relaying".
 
+Note that this relies on there existing a reasonable density of DHT nodes who 
+can be connected to by arbitrary peers (i.e. nodes behind nothing more 
+restrictive than a "cone NAT"). This is also required for finding friends on 
+the DHT.
+
+We also use this mechanism to route via a TCP relay if we are in TCP-only 
+mode.
+
 Note: this protocol should also be usable for announcing DHT Group Chats, 
 replacing the use of the onion there.
+
+#### Forwarding protocol overview
+If a peer wishes to send a packet to a destination via a forwarder which is a 
+DHT node, they send a Forward Request packet containing the packet and the DHT 
+key of the destination. The forwarder sends a Forwarding packet to the 
+destination, if it's in their close list. The destination replies by sending a 
+Forward Reply packet to the forwarder, and the forwarder then sends a 
+Forwarding packet back to original sender. In the Forwarding packet, the 
+forwarder includes a "sendback" to be included in the reply, which tells the 
+forwarder how to route the reply.
+
+A TCP relay can also act as a forwarder to its clients; in this case, the TCP 
+Forward Request gives the IP/Port of the destination DHT node, which need not 
+be in the relay's close list. The relay sets a sendback indicating which TCP 
+client sent the request.
+
+A Forward Request may itself be received as a forwarded packet. In this case, 
+the resulting Forwarding packet should include in its sendback the source 
+IP/Port and sendback of the Forwarding packet with which the Forward Request 
+was delivered, and handle a Forward Reply by sending its data in another 
+Forward Reply to that source. The intended use for this is to allow nodes who 
+are not able to use UDP to send announce requests, by forwarding the request 
+via a TCP relay and a DHT node close to the destination node. Note that 
+chaining forward requests can not be used to implement onion routing, due to 
+the lack of encryption.
+
+To prevent abuse, each sendback should include a timed authenticator, and this 
+should be validated before accepting a Forward Reply. The timeout for this 
+timed authenticator should be reasonably long, say 3600s, since a change in 
+the sendback between forwarding a Search Request and a corresponding Retrieve 
+Request will cause the Retrieve Request to fail.
 
 #### Forward Request Packet
 This is sent as the payload of a Protocol packet.
 
-| Length     | Type    | Contents          |
-|:-----------|:--------|:------------------|
-| `7 | 19`   | IP/Port | Addressee IP/Port |
-| `[0,4096]` | Bytes   | Data              |
+| Length     | Type           | Contents          |
+|:-----------|:---------------|:------------------|
+| `32`       | DHT public key | Addressee pubkey  |
+| `[0,1791]` | Bytes          | Data              |
 
-The IP/Port is as in packed node format. The IP/Port should have first byte 2 
-or 10, indicating UDP IPv4 or IPv6, unless this is a reply to a previous 
-Forwarding packet, in which case the IP/Port should be a copy of the Source 
-IP/Port in that packet.
+On receiving a Forward Request packet, a DHT node should try to find the node 
+with the given pubkey in its DHT close list, and on success send a Forwarding 
+packet to that node, with data copied from that in the current packet, and 
+with a sendback which indicates the IP/Port of the source of the current 
+packet and, if the packet was received in a Forwarding packet, the sendback 
+from that packet.
 
-On receiving a Forward Request packet, a DHT node should send a Forwarding 
-packet to the addressee IP/Port with Sender IP/Port the source of the current 
-packet, and data copied from that in the current packet.
+Note that a node's close list does not include the node itself.
 
-See [TCP Forwarding] for special handling when this packet is received by a 
-TCP server.
-
-To limit the potential for abuse, while leaving room for future expansion, we 
-impose a maximum size of 4096 bytes on the data to be forwarded. If this bound 
-is exceeded, the packet should be silently dropped.
+We impose a maximum size of 1791 bytes on the data to be forwarded, which 
+ensures that a Forwarding packet can't exceed the general bound in tox of 2048 
+on the size of a UDP packet. If the 1791 bound is exceeded, the packet should 
+be ignored.
 
 #### Forwarding Packet
 This is sent as the payload of a Protocol packet.
 
-| Length  | Type          | Contents          |
-|:--------|:--------------|:------------------|
-| `32`    | Symmetric key | Symmetric key     |
-| `[23,]` | Data          | Encrypted payload |
+| Length     | Type      | Contents         |
+|:-----------|:----------|:-----------------|
+| `1`        | `uint8_t` | Sendback length  |
+| [0,254]    | Bytes     | Sendback         |
+| `[0,1791]` | Bytes     | Data             |
 
-The symmetric key should be randomly generated by the sender, and the payload 
-should be encrypted with this symmetric key and the zero nonce, using the 
-encryption algorithm XSalsa20 (provided by `crypto_stream_xor` in NaCl and by 
-`crypto_secretbox_detached` in libsodium).
+The first byte indicates the length in bytes of the sendback which follows. 
+Any value between 0 and 254 is permissible. The value 255 is reserved for 
+future extension of the protocol.
 
-The purpose of this encryption is to prevent well-crafted Forward Requests 
-causing the forwarder to send packets which might be interpreted by other 
-protocols in problematic ways.
+The format of the sendback is not part of the protocol; it is an opaque 
+bytestring which need only be validated and understood by the sender.
 
-Payload:
+The data of the forwarding packet should be interpreted as one of the packets 
+which are part of the DHT Announcements protocol, or as a Forward Request 
+packet. It should be processed as normal, but any reply should be sent as the 
+data of a Forward Reply packet sent to the sender of the current packet, with 
+sendback copied from this packet.
 
-| Length   | Type    | Contents       |
-|:---------|:--------|:---------------|
-| `7 | 19` | IP/Port | Sender IP/Port |
-| `[0,]`   | Data    | Data           |
+#### Forward Reply Packet
+This is sent as the payload of a Protocol packet.
 
-On receiving a Forwarding packet and decrypting the payload, we attempt to 
-handle the data as a DHT packet containing one of the request packets 
-associated with the announcement system defined above. If a response is 
-generated, it should be sent via a Forward Request packet sent to the source 
-of the current packet, addressed to the Sender IP/Port in the payload of the 
-current packet.
+| Length     | Type      | Contents         |
+|:-----------|:----------|:-----------------|
+| `1`        | `uint8_t` | Sendback length  |
+| [0,254]    | Bytes     | Sendback         |
+| `[0,1791]` | Bytes     | Data             |
+
+The recipient of a Forward Reply packet should examine the sendback, confirm 
+that it was recently constructed by the recipient, and send the data on as 
+indicated by the sendback. If the sendback indicates that it should be sent 
+directly to an IP/Port, this should be done in a Forwarding packet with empty 
+sendback. If it indicates that it should itself be forwarded with a sendback, 
+this should be done with another Forward Reply packet. If it indicates it 
+should be sent to a TCP client, this should be done with a TCP Forwarding 
+packet.
 
 #### TCP Forward Request
 | Length     | Type      | Contents          |
@@ -323,36 +365,26 @@ current packet.
 | `[0,4096]` | Bytes     | Data              |
 
 This is sent to a TCP server by a TCP client in an encrypted data packet. The 
-TCP server should treat it as a Forward Request, but should set the Sender 
-IP/Port in the resulting Forwarding packet to a special value, with first byte 
-neither 2 nor 10, which should uniquely identify the TCP client to the TCP 
-server.
+TCP server should treat it as a Forward Request, and send a Forwarding packet 
+to the addressee IP/Port, with sendback which should uniquely identify the TCP 
+client to the TCP server.
+
+If the addressee port is <1024, the packet should be ignored. This is to 
+reduce the potential for abuse.
+
+NOTE: adding a new TCP packet type like this comes with the problem that old 
+TCP servers who don't recognise it will consider it an error and close the 
+connection. Solution: extend the TCP relay handshake to include a protocol 
+version number.
 
 #### TCP Forwarding
 | Length   | Type      | Contents       |
 |:---------|:----------|:---------------|
 | `1`      | `uint8_t` | 0x0b           |
-| `7 | 19` | IP/Port   | Sender IP/Port |
 | `[0,]`   | Bytes     | Data           |
 
 This is sent to a TCP client by a TCP server in an encrypted data packet when 
-the TCP server receives a Forward Request or TCP Forward Request with 
-Addressee IP/Port encoding the TCP client according to the encoding scheme 
-used by that server when handling TCP Forward Requests. The contents is as for 
-a Forwarding packet.
-
-#### Using forwarders
-To forward an RPC DHT request packet to a DHT node, we pick a DHT node from 
-those in our close and friends lists, or if we are not connected to the DHT, a 
-TCP server we are connected to.
-
-An implementation may prefer to maintain a list of known good forwarder nodes 
-for this purpose, considering a node to be good if it forwards to us responses 
-to requests sent via it. 
-
-When sending a response to an RPC DHT request packet which was forwarded to us 
-by a forwarder, we send the response to the source via that forwarder.
-
+the TCP server receives a Forward Reply with sendback encoding the TCP client.
 
 # Announcing connection info
 We use announcements to store our timestamped connection info on the DHT in 
@@ -535,6 +567,14 @@ supplying one might not be necessary), and a means to generate invite codes.
 Preferably there would also be an indication of any active invite codes and 
 the option to cancel them or extend their validity.
 
+FIXME: if the inviter is behind restricted cone NAT or worse, they'll only be 
+able to receive handshakes from non-friends via TCP relays, right? That isn't 
+very nice... Could we adapt the DHTPK mechanism as an alternative to a 
+handshake?
+
+TODO: rather than require the invitee to know both our ID pubkey and an invite 
+code, why not include the ID pubkey in the announcement?
+
 ### Public announcements
 Public bots typically want to accept all connections. This can be implemented 
 by distributing an invite code with no limit on its validity. We term as 
@@ -579,12 +619,15 @@ various announcement secret keys. In fact, the typical case will be a single
 such announcement -- a shared announcement at the common timed hash of our 
 shared public key.
 
-We make and maintain an announcement using Data Search and Store Announcement 
-requests, forwarded via random DHT nodes / TCP servers we are connected to.
+We make and maintain an announcement using forwarded Data Search and Store 
+Announcement requests.
 
 The details are similar to those of onion announcements. Some of the constants 
 suggested here are based on those used in the onion, while others are based on 
 intuition, and all should be fine-tuned.
+
+TODO: discuss forwarding; need to find forwarder nodes we can connect to 
+directly close to the target.
 
 For each announcement we wish to make, we maintain a list of the 8 DHT nodes 
 closest to the announcement public key we have found. Initially, and whenever 
@@ -624,9 +667,8 @@ intensity mode; this simply means that we use a list of nodes of length 1
 rather than 8.
 
 ## Searching
-For each offline friend, we search for its announcements using Data Search and 
-Data Retrieve requests, forwarded via random DHT nodes / TCP servers we are 
-connected to.
+For each offline friend, we search for its announcements using forwarded Data 
+Search and Data Retrieve requests.
 
 We search for the friend's shared announcement if we have a shared signing key 
 for it, else for its invite announcement if we have an invite code for it, 
@@ -657,19 +699,19 @@ individual announcement, with the same process but without the initial period
 of a high rate of requests.
 
 ## Finding announce nodes
+TODO: redo this
 We term as **announce nodes** those DHT nodes who implement the DHT 
 Announcements protocol and who moreover are not behind a restrictive NAT, such 
 that they receive requests sent from arbitrary peers. We maintain an 
 `announce_node` boolean flag on each node in the DHT node lists, indicating 
 whether we consider the node to be an announce node. Whenever we add a node to 
 a DHT node list, we set the flag to false and send the node a Data Search 
-request forwarded via a random peer as above, with the data key set to a 
-random key amongst those we are currently searching for or announcing at (or 
-if there are no such, to a random key from the whole space of possible keys). 
-Whenever we receive a Data Search response, we check if the responding host is 
-in a DHT node list, and if so we set its `announce_node` flag. All nodes in 
-lists for announcing and searching described above are considered to be 
-announce nodes. 
+request forwarded as above, with the data key set to a random key amongst 
+those we are currently searching for or announcing at (or if there are no 
+such, to a random key from the whole space of possible keys). Whenever we 
+receive a Data Search response, we check if the responding host is in a DHT 
+node list, and if so we set its `announce_node` flag. All nodes in lists for 
+announcing and searching described above are considered to be announce nodes. 
 
 When responding to Data Search requests, we give the announce nodes we know 
 closest to the target key (not including ourself).
