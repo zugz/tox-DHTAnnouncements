@@ -121,10 +121,9 @@ reserved for possible future types of storage request.
 
 The Ping ID is generated as in the onion: it is the SHA256 hash of some 
 per-node secret bytes, the current time rounded to 20s, the data public key in 
-the request, and the requester's DHT public key and IP/Port. In the case that 
-the request is received as a forwarded packet (see below), this IP/Port is the 
-sender IP/Port given in the Forwarding packet; otherwise, it is the source 
-IP/Port of the request packet. The number of bytes in the representation of 
+the request, and the requester's DHT public key and the source IP/Port. In the 
+case that the request is received as a forwarded packet (see below), this 
+IP/Port is that of the forwarder. The number of bytes in the representation of 
 the IP/Port should not depend on the IP/Port, so that the length of the data 
 to be hashed is a constant, preventing length extension attacks.
 
@@ -589,12 +588,13 @@ which is already on the list indicating that our current announcement is
 stored or that a Store Announcement request would be accepted, we also send a 
 Store Announcement request to that node (making sure to use the Port/IP that's 
 on the list rather than the source of the Data Search response, to prevent UDP 
-amplification attacks). In this request we put an initial announcement, or a 
-reannouncement if the response indicated that our current announcement is 
-already stored. We set the requested timeout to 300 seconds. If we obtain an 
-Announcement Store response from a node indicating that the announcement is 
-stored, we consider ourselves announced to that node, until a Data Search 
-response or further Store Announcement response indicates otherwise.
+amplification attacks, and using the same forwarder used for the Data Search 
+request). In this request we put an initial announcement, or a reannouncement 
+if the response indicated that our current announcement is already stored. We 
+set the requested timeout to 300 seconds. If we obtain an Announcement Store 
+response from a node indicating that the announcement is stored, we consider 
+ourselves announced to that node, until a Data Search response or further 
+Store Announcement response indicates otherwise.
 
 The interval between sending Data Search requests to a node on our list is 120 
 seconds if we are announced to it, and otherwise is `min(120,3n)` where `n` is 
