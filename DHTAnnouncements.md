@@ -394,11 +394,11 @@ let `offset` be the last 8 bytes of `input` interpreted as a big-endian
 unsigned 64 bit integer,
 define
 
-    rounded_time := (node_time + offset + n*M) / P
+    a := (node_time + offset + n*M) / P
 
 where n is 0 for the first timed hash and 1 for the second,
 and addition is modulo $2^{64}$,
-and finally define the timed hash as `SHA256(input, rounded_time)`.
+and finally define the timed hash as `SHA256(input, a)`.
 
 The two timed hashes will differ $M/P$ of the time.
 
