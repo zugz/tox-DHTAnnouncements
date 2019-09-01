@@ -92,6 +92,21 @@ Data is indexed by a Curve25519 public key, called the Data Public Key. In the
 case of announcements, we refer to this as the Announcement Public Key, for 
 which the announcer should have the corresponding Announcement Secret Key.
 
+### Timed authenticators
+A "timed authenticator" (or "Timed Auth") is a 32-byte bytestring used as a 
+time-limited authorisation token. Its precise construction need not be 
+considered part of the protocol, since it need only to be verifiable by its 
+setter, so the following definition should be considered a guideline.
+
+The **timed authenticator** of a bytestring is the HMAC-SHA-512256 
+authenticator of the concatenation of `unix_time/20` as a `uint64_t` and the 
+bytestring, using a secret key held for this exclusive purpose.
+
+To verify a purported timed authenticator of some data, a node uses their 
+secret key to generate the timed authenticator for the current time and also 
+that for 20 seconds prior, and considers the authenticator valid if it is 
+equal to either of these.
+
 ### Data Search Request and Response
 These packets form an RPC DHT Packet pair.
 
@@ -107,7 +122,7 @@ These packets form an RPC DHT Packet pair.
 | `32`       | Public Key | Data public key                             |
 | `1`        | Bool       | Data is stored by this node                 |
 | `0 | 32`   | Bytes      | SHA256 of data if stored                    |
-| `32`       | Ping ID    | Ping ID                                     |
+| `32`       | Timed Auth | Timed authenticator                         |
 | `1`        | Byte       | Data types currently accepted               |
 | `1`        | Int        | Number of nodes in the response (maximum 4) |
 | `[0, 204]` | Node Infos | Nodes in Packed Node Format                 |
@@ -119,13 +134,10 @@ announcement (up to the maximum of 512 bytes). This does not consitute a
 promise to accept a subsequent Store Announcement request. Other bits are 
 reserved for possible future types of storage request.
 
-The Ping ID is generated as in the onion: it is the SHA256 hash of some 
-per-node secret bytes, the current time rounded to 20s, the data public key in 
-the request, and the requester's DHT public key and the source IP/Port. In the 
-case that the request is received as a forwarded packet (see below), this 
-IP/Port is that of the forwarder. The number of bytes in the representation of 
-the IP/Port should not depend on the IP/Port, so that the length of the data 
-to be hashed is a constant, preventing length extension attacks.
+The Timed Auth is the timed authenticator of the concatenation of the data 
+public key in the request, the requester's DHT public key, and the source 
+IP/Port. In the case that the request is received as a forwarded packet (see 
+below), this IP/Port is that of the forwarder.
 
 The nodes returned are those announce nodes (at most 4) closest to the Data 
 Public Key known by the responding node (see [Finding announce nodes]).
@@ -140,15 +152,16 @@ an amplification ratio of 2.9. Hopefully not high enough to be useful.
 These packets form an RPC DHT Packet pair.
 
 #### Data Retrieve Request
-| Length | Type       | Contents        |
-|:-------|:-----------|:----------------|
-| `32`   | Public Key | Data public key |
-| `32`   | Ping ID    | Ping ID         |
+| Length | Type       | Contents            |
+|:-------|:-----------|:--------------------|
+| `32`   | Public Key | Data public key     |
+| `32`   | Timed Auth | Timed Authenticator |
 
-The Ping ID should be set to the Ping ID obtained from a recent Data Search 
-response to a search for the same data public key, as above. This check is to 
-prevent redirection of the response to a forged IP address, which could be 
-used for a UDP amplification attack.
+The Timed Auth should be set to the timed authenticator obtained from a recent 
+Data Search response to a search for the same data public key, and should be 
+validated by the recipient. This check is to prevent redirection of the 
+response to a forged IP address, which could be used for a UDP amplification 
+attack.
 
 #### Data Retrieve Response
 | Length | Type       | Contents        |
@@ -173,19 +186,17 @@ The payload is authenticated and encrypted with the announcement secret key
 and the recipient's DHT public key and the given nonce, and consists of a Ping 
 ID, a requested timeout, and an announcement:
 
-| Length      | Type       | Contents            |
-|:------------|:-----------|:--------------------|
-| `32`        | Ping ID    | Ping ID             |
-| `4`         | `uint32_t` | Requested timeout   |
-| `1`         | Bytes      | Announcement Type   |
-| `[0-512]`   | Bytes      | Announcement Data   |
+| Length    | Type       | Contents            |
+|:----------|:-----------|:--------------------|
+| `32`      | Timed Auth | Timed authenticator |
+| `4`       | `uint32_t` | Requested timeout   |
+| `1`       | Bytes      | Announcement Type   |
+| `[0-512]` | Bytes      | Announcement Data   |
 
-The Ping ID should be set to the Ping ID obtained from a recent Data Search 
-response to a search for the same data public key. The recipient checks that 
-this is valid before responding; that is, that it is equal to the Ping ID for 
-the announcement public key with either the current rounded unix time or the 
-previous rounded unix time. This check is to prevent replay of old 
-announcements.
+The Timed Auth should be set to the timed authenticator obtained from a recent 
+Data Search response to a search for the same data public key. The recipient 
+checks that this is valid before responding. This check is to prevent replay 
+of old announcements.
 
 The requested timeout is the time in seconds for which the announcement is 
 requested to be stored.
