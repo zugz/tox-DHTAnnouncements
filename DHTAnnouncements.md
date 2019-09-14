@@ -626,23 +626,46 @@ The details are similar to those of onion announcements. Some of the constants
 suggested here are based on those used in the onion, while others are based on 
 intuition, and all should be fine-tuned.
 
-TODO: discuss forwarding; need to find forwarder nodes we can connect to 
-directly close to the target.
+For the rest of this section, whenever we talk about sending packets to a DHT 
+node and receiving responses, it should be understood that if we are not 
+connected to the DHT, then this is done via a TCP relay using the Forwarding 
+protocol, and we nonetheless term this as "direct" communication with the DHT 
+node.
 
-For each announcement we wish to make, we maintain a list of the 8 DHT nodes 
-closest to the announcement public key we have found. Initially, and whenever 
-the list is not full, it is populated with random announce nodes from the DHT 
-node lists (see [Finding announce nodes]).
+For each announcement we wish to make, we maintain a list of up to 8 DHT 
+nodes. This list will contain the nodes we have found closest to the 
+announcement public key. We mark a node on this list as an **open** node if  
+we confirm we are able to communicate with it directly, and we ensure the list 
+never contains more than 4 non-open nodes. Given this proviso, the list 
+contains nodes as close as possible to the target key; an attempt to add a 
+node succeeds if it can be added, removing a more distant node if the list is 
+full, without this resulting in too many non-open nodes.
 
-We periodically send Data Search requests to the nodes on the list. When we 
-receive a Data Search response, we try to add the sender to the list, and we 
-send further Data Search requests to any nodes given in the response which 
-could be added to the list. When we receive a Data Search response from a node 
-which is already on the list indicating that our current announcement is 
-stored or that a Store Announcement request would be accepted, we also send a 
-Store Announcement request to that node (making sure to use the Port/IP that's 
-on the list rather than the source of the Data Search response, to prevent UDP 
-amplification attacks, and using the same forwarder used for the Data Search 
+When we talk about sending a "forwarded" request below, we mean that the 
+request is sent as the payload of a Forward request sent directly to a random 
+open node in the list. (Note that if we are not connected to the DHT, this 
+Forward request is itself forwarded via a TCP relay).
+
+We periodically send Data Search requests to the nodes on the list; these 
+requests are sent directly to open nodes, and forwarded to non-open nodes. 
+When we receive a Data Search response, we send further Data Search requests 
+to any nodes given in the response which could be added as non-open nodes to 
+the list. We also attempt to add the sender of the response to the list -- as 
+an open node if we received the response directly, and as a non-open node if 
+it was forwarded. If we do add it as a non-open node in this way, we also send 
+it a direct Data Search request.
+
+Initially, and periodically while the list is not full, we populate the list 
+by sending Data Search requests to random announce nodes (see [Finding 
+announce nodes]) from our DHT nodes lists if we are connected to the DHT, and 
+to random bootstrap nodes otherwise.
+
+When we receive a Data Search response from a node which is already on the 
+list indicating that our current announcement is stored or that a Store 
+Announcement request would be accepted, we also send a Store Announcement 
+request to that node (making sure to use the Port/IP that's on the list rather 
+than the source of the Data Search response, to prevent UDP amplification 
+attacks, and using the same forwarders (if any) used for the Data Search 
 request). In this request we put an initial announcement, or a reannouncement 
 if the response indicated that our current announcement is already stored. We 
 set the requested timeout to 300 seconds. If we obtain an Announcement Store 
@@ -650,21 +673,22 @@ response from a node indicating that the announcement is stored, we consider
 ourselves announced to that node, until a Data Search response or further 
 Store Announcement response indicates otherwise.
 
-The interval between sending Data Search requests to a node on our list is 120 
-seconds if we are announced to it, and otherwise is `min(120,3n)` where `n` is 
-a count of the number of Data Search requests which have been sent to the 
-node, set to 0 when the node is added to the list, and set to 1 when we are 
-informed by a Data Search response from the node that we are no longer 
-announced at the node.
+The interval between sending these periodic Data Search requests to a node on 
+our list is 120s if we are announced to it, and otherwise is `min(120,3n)` 
+seconds where `n` is a count of the number of Data Search requests which have 
+been sent to the node, set to 0 when the node is added to the list, and set to 
+1 when we are informed by a Data Search response from the node that we are no 
+longer announced at the node.
 
-A node on the list which fails to respond to 3 consecutive Data Search 
-requests is removed from the list.
+A node on the list which fails to respond to a Data Search request is sent 
+another at most 10s later. After 3 consecutive Data Search requests are sent 
+to a node without a response, it is removed from the list.
 
 We keep track of the total amount of time we have spent announcing at a given 
 individual key without a connection to the corresponding friend being made, 
 saving across sessions. Once this exceeds 64 hours, we switch to a low 
-intensity mode; this simply means that we use a list of nodes of length 1 
-rather than 8.
+intensity mode; this simply means that we reduce the size of the list from 8 
+to 2, with at most 1 non-open node.
 
 ## Searching
 For each offline friend, we search for its announcements using forwarded Data 
@@ -699,19 +723,17 @@ individual announcement, with the same process but without the initial period
 of a high rate of requests.
 
 ## Finding announce nodes
-TODO: redo this
 We term as **announce nodes** those DHT nodes who implement the DHT 
-Announcements protocol and who moreover are not behind a restrictive NAT, such 
-that they receive requests sent from arbitrary peers. We maintain an 
-`announce_node` boolean flag on each node in the DHT node lists, indicating 
-whether we consider the node to be an announce node. Whenever we add a node to 
-a DHT node list, we set the flag to false and send the node a Data Search 
-request forwarded as above, with the data key set to a random key amongst 
-those we are currently searching for or announcing at (or if there are no 
-such, to a random key from the whole space of possible keys). Whenever we 
-receive a Data Search response, we check if the responding host is in a DHT 
-node list, and if so we set its `announce_node` flag. All nodes in lists for 
-announcing and searching described above are considered to be announce nodes. 
+Announcements protocol. We maintain an `announce_node` boolean flag on each 
+node in the DHT node lists, indicating whether we consider the node to be an 
+announce node. Whenever we add a node to a DHT node list, we set the flag to 
+false and send the node a Data Search request forwarded as above, with the 
+data key set to a random key amongst those we are currently searching for or 
+announcing at (or if there are no such, to a random key from the whole space 
+of possible keys). Whenever we receive a Data Search response, we check if the 
+responding host is in a DHT node list, and if so we set its `announce_node` 
+flag. All nodes in lists for announcing and searching described above are 
+considered to be announce nodes. 
 
 When responding to Data Search requests, we give the announce nodes we know 
 closest to the target key (not including ourself).
