@@ -501,6 +501,10 @@ Friends confirm receipt of shared signing pubkeys, and we keep track of
 which friends have confirmed that they have our current shared signing 
 pubkey.
 
+FIXME: this needs a way in the toxcore api for the client to aver that it has 
+saved the latest savedata, since only once the key is saved should we confirm 
+receipt. Ugly, but I see no way around it.
+
 We save across sessions the latest shared signing pubkey we have received from 
 each friend.
 
@@ -509,10 +513,9 @@ shared with anyone except as described above.
 
 Our **shared announcement** consists of a random nonce followed by our 
 timestamped connection info signed with our shared signing keypair, and then 
-encrypted with the nonce using the shared signing public key as a symmetric 
-encryption key. The symmetric encryption algorithm for this purpose is 
-XSalsa20 (exposed as `crypto_stream_xor` in NaCl and as 
-`crypto_secretbox_detached` in libsodium).
+authenticatedly encrypted with the nonce using the shared signing public key 
+as a symmetric encryption key. The symmetric authenticated encryption 
+algorithm for this purpose is XSalsa20Poly1305 (`crypto_secretbox` in NaCl).
 
 The encryption prevents the node where the announcement is stored from reading 
 the announcement (which may contain information, such as timestamps and our 
@@ -573,6 +576,9 @@ handshake?
 
 TODO: rather than require the invitee to know both our ID pubkey and an invite 
 code, why not include the ID pubkey in the announcement?
+
+TODO: possible simplification: just expose current shared key so it can be 
+given out, and expose a way to manually refresh the key. Bit dodgy...
 
 ### Public announcements
 Public bots typically want to accept all connections. This can be implemented 
