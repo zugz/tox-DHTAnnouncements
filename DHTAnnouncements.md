@@ -496,10 +496,6 @@ Friends confirm receipt of shared signing pubkeys, and we keep track of
 which friends have confirmed that they have our current shared signing 
 pubkey.
 
-FIXME: this needs a way in the toxcore api for the client to aver that it has 
-saved the latest savedata, since only once the key is saved should we confirm 
-receipt. Ugly, but I see no way around it.
-
 We save across sessions the latest shared signing pubkey we have received from 
 each friend.
 
@@ -520,9 +516,13 @@ prevents our friends from faking an announcement for us.
 Our shared announcement is announced with announcement secret key(s) the timed 
 hashes of our shared signing pubkey.
 
-We make a shared announcement as long as at least one friend is known to have 
-our current shared signing pubkey, and we make individual announcements for 
-each of our other friends.
+We make a shared announcement as long as at least one friend is believed to 
+have our current shared signing pubkey, and we make individual announcements 
+for each of our other friends. We can not be certain that a friend who 
+previously received our shared key will still have it subsequently, since they 
+might for various exceptional reasons have reverted to an earlier save state. 
+So as a precaution, we also make ``low-intensity'' individual announcements 
+for such friends.
 
 ### Security notes
 Our friends can interfere with our shared announcements -- either by occupying 
@@ -614,10 +614,8 @@ announcement to find us in the future, and we need make no other announcement.
 # Announcing and searching
 
 ## Making announcements
-As described above, at any time we want to maintain various announcements at 
-various announcement secret keys. In fact, the typical case will be a single 
-such announcement -- a shared announcement at the common timed hash of our 
-shared public key.
+As described above, at any given time we want to maintain various 
+announcements at various announcement secret keys.
 
 We make and maintain an announcement using forwarded Data Search and Store 
 Announcement requests.
@@ -684,11 +682,18 @@ A node on the list which fails to respond to a Data Search request is sent
 another at most 10s later. After 3 consecutive Data Search requests are sent 
 to a node without a response, it is removed from the list.
 
+We consider an announcement to be announced if it is stored on at least half 
+of the nodes in the list.
+
 We keep track of the total amount of time we have spent announcing at a given 
 individual key without a connection to the corresponding friend being made, 
 saving across sessions. Once this exceeds 64 hours, we switch to a 
 low-intensity mode; this simply means that we reduce the size of the list from 
 8 to 2, with at most 1 non-open node.
+
+The ``low-intensity'' individual announcements made alongside a shared 
+announcement use this low-intensity mode from the start, and moreover do not 
+start until the shared announcement is announced.
 
 ## Searching
 For each offline friend, we search for its announcements using forwarded Data 
