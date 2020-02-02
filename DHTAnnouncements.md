@@ -735,3 +735,60 @@ We don't announce via the onion, nor generate or expose any nospam.
 Preferably, clients should indicate which friends are using the legacy onion 
 system, and warn the user of the privacy implications of this (so the user 
 will exhort their friends to upgrade).
+
+# API
+A separate list of Invites is kept by Messenger, consisting of invite codes we 
+have generated and are announcing for. Each contains a timeout and a maximum 
+number of uses. This invite list is exposed with a parallel API to that for 
+the friend list, including functions to add and delete invites. Expired 
+invites are deleted immediately.
+
+A new API function allows adding a new friend with just an invite key. 
+`tox_friend_get_real_pk()` will return error on such a friend, until its 
+public key has been found. A new API function gets the invite key of such a 
+friend, which remains valid permanently, and returns an error if called on a 
+friend who was added with the existing API functions.
+
+# Suggested user interface
+(This is written with a non-minimalist GUI in mind, such as qTox; other 
+clients may want to follow the general pattern but cut the handholding.)
+
+The invite list is presented at the top of the friend list. Selecting an 
+invite shows the invite code and its timeout, and short instructions along the 
+lines of "Attempting to connect to new friend; they should enter the following 
+code into their tox client:". A "cancel invitation" button is shown to allow 
+deleting the invitation, and the invitation can also be deleted by a means 
+parallel to that used for deleting friends. If the client allows setting 
+friend nicknames, it should similarly allow setting a nickname for an invite, 
+which will then transfer to any friend added using it (determined by checking 
+the `invite_key` of new friends in the friendlist).
+
+A friend with no public key should have its `invite_key` shown instead. When 
+selected, there should be some explanation, along the lines of "Attempting to 
+accept new friend invitation (the friend must be online)".
+
+If a friend has a public key but has never been seen (i.e. 
+`tox_get_friend_last_online()` returns `UINT64_MAX`), when selected there 
+should be an explanation along the lines of "Attempting to connect to new 
+friend; they must add your Tox ID in their tox client, and must be online". 
+Your Tox ID should be easily accessible (e.g. shown on clicking on and/or 
+mousing over the words "Tox ID").
+
+The "add friend" box should accept both (nospamless) Tox IDs and invite codes. 
+The former are added with `tox_friend_add_norequest()`, the latter with the 
+new API function discussed above. There needs to be a cross-client standard on 
+how to render an invite code as a string in a way which differentiates it from 
+a Tox ID. For example, invite codes could be hex-encoded with a checksum as 
+for Tox IDs, but prefixed with the string "inv". We could also consider 
+allowing Base64 encodings for invite codes, and perhaps even for nospamless 
+Tox IDs.
+
+Where our ToxID is shown, there should be an "invite new friend" button which 
+creates a new one-shot invite (with timeout configured in advanced options and 
+with a reasonable default, perhaps 30 days) and then selects the newly created 
+invite.
+
+The ability to create invites with other settings, even public invites, could 
+also be presented -- but shouldn't be forefronted, and should preferably come 
+with a warning explaining that those who know an active invite code can use it 
+to track you by IP address and determine the IP addresses of your friends.
