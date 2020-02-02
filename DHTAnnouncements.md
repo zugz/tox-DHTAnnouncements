@@ -621,32 +621,33 @@ request is sent as the payload of a Forward request sent directly to a random
 open node in the list. (Note that if we are not connected to the DHT, this 
 Forward request is itself forwarded via a TCP relay).
 
-We periodically send Data Search requests to the nodes on the list; these 
-requests are sent directly to open nodes, and forwarded to non-open nodes. 
-When we receive a Data Search response, we send further Data Search requests 
-to any nodes given in the response which could be added as non-open nodes to 
-the list. We also attempt to add the sender of the response to the list -- as 
-an open node if we received the response directly, and as a non-open node if 
-it was forwarded. If we do add it as a non-open node in this way, we also send 
-it a direct Data Search request.
-
 Initially, and periodically while the list is not full, we populate the list 
 by sending Data Search requests to random announce nodes (see [Finding 
 announce nodes]) from our DHT nodes lists if we are connected to the DHT, and 
 to random bootstrap nodes otherwise.
 
+We periodically send Data Search requests to the nodes on the list; the 
+requests to open nodes are sent directly, and those to non-open nodes are 
+forwarded. When we receive a Data Search response, we send further Data Search 
+requests to any nodes given in the response which could be added as non-open 
+nodes to the list. We also attempt to add the sender of the response to the 
+list -- as an open node if we received the response directly, and as a 
+non-open node if it was forwarded. If we do add it as a non-open node in this 
+way, we also send it a direct Data Search request.
+
 When we receive a Data Search response from a node which is already on the 
-list indicating that our current announcement is stored or that a Store 
-Announcement request would be accepted, we also send a Store Announcement 
-request to that node (making sure to use the Port/IP that's on the list rather 
-than the source of the Data Search response, to prevent UDP amplification 
-attacks, and using the same forwarders (if any) used for the Data Search 
-request). In this request we put an initial announcement, or a reannouncement 
-if the response indicated that our current announcement is already stored. We 
-set the requested timeout to 300 seconds. If we obtain an Announcement Store 
-response from a node indicating that the announcement is stored, we consider 
-ourselves announced to that node, until a Data Search response or further 
-Store Announcement response indicates otherwise.
+list (as an open node if the response is direct), if the response indicates 
+that our current announcement is stored or that a Store Announcement request 
+would be accepted, we also send a Store Announcement request to that node 
+(making sure to use the Port/IP that's on the list rather than the source of 
+the Data Search response, to prevent UDP amplification attacks, and using the 
+same forwarders (if any) used for the Data Search request). In this request we 
+put an initial announcement, or a reannouncement if the response indicated 
+that our current announcement is already stored. We set the requested timeout 
+to 300 seconds. If we obtain an Announcement Store response from a node 
+indicating that the announcement is stored, we consider ourselves announced to 
+that node, until a Data Search response or further Store Announcement response 
+indicates otherwise.
 
 The interval between sending these periodic Data Search requests to a node on 
 our list is 120s if we are announced to it, and otherwise is `min(120,3n)` 
