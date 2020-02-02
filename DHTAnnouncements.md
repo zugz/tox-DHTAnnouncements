@@ -538,22 +538,33 @@ pubkeys by listening at the shared announcement pubkey.
 ## Invite announcements
 An **invite code** is the public key of an Ed25519 signing keypair. A 
 corresponding **invite announcement** is made exactly as in the case of a 
-shared announcement.
+shared announcement, except that our ID pubkey is included along with the 
+timestamped connection info in the encrypted part of the announcement.
 
-We adapt the handshake packet to allow an invite code to be included at the 
-end of the encrypted part. We then add as a friend anyone who sends us a 
-handshake which specifies a valid invite code.
+A peer who knows the invite code proceeds as follows. They find and decrypt 
+the announcement, checking the signature, to obtain our connection info. They 
+then use this to send an **Invite Accept** packet to us; this is sent on the 
+DHT in a DHT Request packet (i.e. routed via a DHT node we are connected to) 
+and/or via TCP OOB packets on TCP relays we are connected to. The Invite 
+Accept packet they send to us consists of their ID pubkey, a random nonce, 
+and, authenticatedly encrypted to our ID pubkey using their ID pubkey and the 
+nonce, the invite code and their connection info. On receiving an Invite 
+Accept packet containing a valid invite code, we add the ID pubkey as a 
+friend, and may use the connection info to connect to them.
 
-The intention is that we generate an invite code and send it out-of-band along 
-with our ID pubkey to some limited set of people. A common instance of this is 
-asking someone who does not use tox to install it and find you on the network. 
+### Usage
+We generate an invite code and send it out-of-band to some limited set of 
+people. A common instance of this is asking someone who does not use tox to 
+install it and find you on the network. 
 
-In terms of friend requests, an invite announcement is analagous to giving out 
+In terms of friend requests, an invite announcement is analogous to giving out 
 a ToxID with a nospam and accepting every friend request obtained without 
 checking the sender.
 
 Invite codes can have validity limited in time and in the number of peers who 
-can use it; 1 day and 1 peer might be sensible defaults.
+can use it; 1 day and 1 peer might be sensible defaults. We consider an invite 
+code to be used by a peer when we have connected to them and sent them our 
+shared key.
 
 One big problem with invite announcements is that it is difficult to explain 
 to the user the privacy consequences of the invite code being leaked. This 
@@ -564,52 +575,18 @@ supplying one might not be necessary), and a means to generate invite codes.
 Preferably there would also be an indication of any active invite codes and 
 the option to cancel them or extend their validity.
 
-FIXME: if the inviter is behind restricted cone NAT or worse, they'll only be 
-able to receive handshakes from non-friends via TCP relays, right? That isn't 
-very nice... Could we adapt the DHTPK mechanism as an alternative to a 
-handshake?
-
-TODO: rather than require the invitee to know both our ID pubkey and an invite 
-code, why not include the ID pubkey in the announcement?
-
-TODO: possible simplification: just expose current shared key so it can be 
-given out, and expose a way to manually refresh the key. Bit dodgy...
-
 ### Public announcements
 Public bots typically want to accept all connections. This can be implemented 
 by distributing an invite code with no limit on its validity. We term as 
 **public announcements** the corresponding invite announcements.
 
-A naive implementation would mean potential users of a bot have to input both 
-its ID pubkey and its invite code. However, this can be shortcut by deriving 
-one public key from the other. Theoretically this could work either way round, 
-but libsodium only provides functions for deriving Curve25519 keypairs from 
-Ed25519 keypairs, so we consider that direction. It could work as follows.
-
-On first run, the bot generates an Ed25519 signing keypair and derives its 
-long-term Curve25519 ID keypair from it. The signing keypair is saved across 
-sessions.
-
-The public signing key can be distributed publically, with a prefix to 
-distinguish it from an ordinary ToxID, say as
-
-    p:BA155D19285AEFA10BF5D409FFCA513FDF8B356260CF98B9C1D212CAD367424A .
-
-When a user gives such a string to a Tox client as a friend to be added, the 
-client should interpret the part after the prefix as a key and deliver it to a 
-new API function, which interprets it as an invite code for the Curve25519 ID 
-pubkey derived from it.
-
-In libsodium, the relevant key derivation functions are 
-`crypto_sign_ed25519_sk_to_curve25519()`
-and `crypto_sign_ed25519_pk_to_curve25519()`.
-NaCl does not currently provide corresponding functions, so we have to either 
-implement them ourselves (which is straightforward in theory) or require 
-libsodium.
-
 When someone connects to us via a public announcement, we do not send them our 
 shared signing key; as a result, they will continue to use the public 
 announcement to find us in the future, and we need make no other announcement.
+
+Note that as discussed for shared keys, it is easy for anyone who knows the 
+public invite code to prevent the public announcement and/or to determine the 
+IP addresses of those searching for it.
 
 # Announcing and searching
 
@@ -722,10 +699,11 @@ decrypt it and/or check the signature as appropriate, and if it is valid and
 the timestamp is greater than that on any previous announcement we obtained 
 for the friend, we pass the connection info to the appropriate modules.
 
-Because it is possible that we have an outdated shared signing key for the 
-friend, when we search for the shared announcement we also search for the 
-individual announcement, with the same process but without the initial period 
-of a high rate of requests.
+Because it is possible that we have an outdated shared signing key or invite 
+code for the friend, when we search for a shared/invite announcement we also 
+search for the individual announcement (if we know the friend's ID pubkey), 
+with the same process but without the initial period of a high rate of 
+requests.
 
 ## Finding announce nodes
 We term as **announce nodes** those DHT nodes who implement the DHT 
