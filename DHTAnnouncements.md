@@ -196,8 +196,8 @@ Data Search response to a search for the same data public key. The recipient
 checks that this is valid before responding. This check is to prevent replay 
 of old announcements.
 
-The requested timeout is the time in seconds for which the announcement is 
-requested to be stored.
+The requested timeout is the time in seconds for which it is requested that 
+the announcement be stored.
 
 The announcement type is 0 for an initial announcement or 1 for a 
 reannouncement.
@@ -474,11 +474,6 @@ and inform the user if the system clock appears to be significantly wrong.
 respond with their clock time (plus error) on request, but this would allow 
 nodes to be tracked by their clock drift and clock precision).
 
-TODO: alternatively, we could just set M to 86400 = 1d? So users need only 
-have the date set correctly. Is even that too much to expect? This would make 
-tracking across IP address changes much easier, however, and worsen the 
-effects of a rotten/DoSed rendezvous point.
-
 ## Individual announcements
 If A and B are peers, A's **individual announcement** for B consists of a 
 random 24-byte nonce followed by A's timestamped connection info, 
@@ -682,8 +677,8 @@ The interval between sending these periodic Data Search requests to a node on
 our list is 120s if we are announced to it, and otherwise is `min(120,3n)` 
 seconds where `n` is a count of the number of Data Search requests which have 
 been sent to the node, set to 0 when the node is added to the list, and set to 
-1 when we are informed by a Data Search response from the node that we are no 
-longer announced at the node.
+1 when we are informed by a Data Search response from the node that we have 
+just ceased to be announced at the node.
 
 A node on the list which fails to respond to a Data Search request is sent 
 another at most 10s later. After 3 consecutive Data Search requests are sent 
@@ -691,9 +686,9 @@ to a node without a response, it is removed from the list.
 
 We keep track of the total amount of time we have spent announcing at a given 
 individual key without a connection to the corresponding friend being made, 
-saving across sessions. Once this exceeds 64 hours, we switch to a low 
-intensity mode; this simply means that we reduce the size of the list from 8 
-to 2, with at most 1 non-open node.
+saving across sessions. Once this exceeds 64 hours, we switch to a 
+low-intensity mode; this simply means that we reduce the size of the list from 
+8 to 2, with at most 1 non-open node.
 
 ## Searching
 For each offline friend, we search for its announcements using forwarded Data 
@@ -732,13 +727,13 @@ We term as **announce nodes** those DHT nodes who implement the DHT
 Announcements protocol. We maintain an `announce_node` boolean flag on each 
 node in the DHT node lists, indicating whether we consider the node to be an 
 announce node. Whenever we add a node to a DHT node list, we set the flag to 
-false and send the node a Data Search request forwarded as above, with the 
-data key set to a random key amongst those we are currently searching for or 
-announcing at (or if there are no such, to a random key from the whole space 
-of possible keys). Whenever we receive a Data Search response, we check if the 
-responding host is in a DHT node list, and if so we set its `announce_node` 
-flag. All nodes in lists for announcing and searching described above are 
-considered to be announce nodes. 
+false and send the node a Data Search request, with the data key set to a 
+random key amongst those we are currently searching for or announcing at (or 
+if there are no such, to a random key from the whole space of possible keys). 
+Whenever we receive a Data Search response, we check if the responding host is 
+in a DHT node list, and if so we set its `announce_node` flag. All nodes in 
+lists for announcing and searching described above are considered to be 
+announce nodes. 
 
 When responding to Data Search requests, we give the announce nodes we know 
 closest to the target key (not including ourself).
