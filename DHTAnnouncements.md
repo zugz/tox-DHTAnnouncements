@@ -51,8 +51,8 @@ friend, who can then use it to add you without you having to know their ToxID.
 Similarly, bots can set things up so that anyone can add them.
 
 This system does not use any "nospam" -- the ToxID of a peer is just their 
-long-term ID public key. This makes it easy to introduce existing friends to 
-each other.
+long-term ID public key with a checksum. This makes it easy to introduce 
+existing friends to each other.
 
 There should be considerable bandwidth reductions in typical usage.
 
