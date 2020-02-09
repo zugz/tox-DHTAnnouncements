@@ -717,7 +717,9 @@ if there are no such, to a random key from the whole space of possible keys).
 Whenever we receive a Data Search response, we check if the responding host is 
 in a DHT node list, and if so we set its `announce_node` flag. All nodes in 
 lists for announcing and searching described above are considered to be 
-announce nodes. 
+announce nodes. A node on a DHT node list which is deleted from an 
+announce/search list due to failing to respond to Data Search requests has its 
+flag set to false.
 
 When responding to Data Search requests, we give the announce nodes we know 
 closest to the target key (not including ourself).
