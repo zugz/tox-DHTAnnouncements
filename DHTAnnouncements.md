@@ -103,22 +103,35 @@ encoding/decoding for the URI form of the invitation and public key.
 (The data encoding scheme is base64url with the 64 characters `0-9a-zA-Z_-`.)
 
 * `tox_self_encode64_invitation` returns an ASCII string of length 
-  `TOX_INVITATION_URI_SIZE` of the form
+  `TOX_INVITATION_URI64_SIZE` of the form
 ```
 tox:FMZVriPO5aiZaQWmA4CQrog2msqt6y6j_fOxPUw-4CE?uvuNcPsjJOvlfODpC-dUEQ .
 ```
 
 * `tox_self_encode64_public_key` returns an ASCII string of length 
-  `TOX_PUBLIC_KEY_URI_SIZE` of the form
+  `TOX_PUBLIC_KEY_URI64_SIZE` of the form
 ```
 tox:FMZVriPO5aiZaQWmA4CQrog2msqt6y6j_fOxPUw-4CE .
 ```
 
-* Conversely, `tox_friend_decode64_invitation` takes a string and its length, 
+* Conversely, `tox_friend_decode_invitation` takes a string and its length, 
   and writes an address or returns an error. The `tox:` URI scheme prefix may 
-  be omitted in the string. `tox_friend_decode64_public_key` is similar.
+  be omitted in the string. `tox_friend_decode_public_key` is similar.
   `tox_friend_decode_legacy_address` similarly decodes a legacy hex-encoded 
   address. 
+
+* Although this base64 form is recommended as the default, there are also 
+  base32 and hex versions of the encoding functions, 
+  `tox_self_encode32_invitation` and `tox_self_encode16_invitation` etc, and 
+  the decode functions also accept the output of these.
+
+    The base32 alphabet uses all upper case alphanumeric characters except 
+    ILOU ("Crockford's base 32"),
+    and the hex alphabet is 0-9A-F. Examples:
+```
+tox:JPRFWSKAD3KVB4J60X2KCEJTCB13Q9A73KKN4854071TRRH8A6TJA9Q?4243ZAVDEQD39TH6EKGYNDGCX1W2E
+tox:55C7F52E4C32B956474037191C1DD00B643543B2216AB6450DE09F8245828A9DBCDC?8E83D9EA49C3A170C5598A74481B81BFEC05
+```
 
 Intended behaviour when the user provides a string (perhaps in a qr code) to 
 be added as a friend is to use the above decode functions to interpret the 
