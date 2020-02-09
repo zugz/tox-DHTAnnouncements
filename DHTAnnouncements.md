@@ -29,8 +29,106 @@ See
 for further discussion on the motivation for replacing the onion, and 
 constraints on possible replacements.
 
-## Remark on IP addresses
+## Summary for end-users
+*   The tox address used to make friend requests now looks like this:
+    `tox:FMZVriPO5aiZaQWmA4CQrog2msqt6y6j_fOxPUw-4CE?uvuNcPsjJOvlfODpC-dUEQ`.
+    Anyone who has your tox address can look up your IP address and send you a 
+    friend request.
 
+    You can change your address at any time; this sets the part after the 
+    question mark to a new random value, invalidating the previous address.
+
+    The part before the question mark, 
+    `tox:FMZVriPO5aiZaQWmA4CQrog2msqt6y6j_fOxPUw-4CE`, is your permanent tox 
+    public key.
+    You may wish to publicise this public key, so friends can be sure of who 
+    they are talking to.
+    On its own, a public key is not enough to find its owner's IP address or send 
+    them a friend request.
+    However, if you add the public key of someone who has also added your own 
+    public key, you will connect to them without a friend request.
+
+*   Data usage should be much less than with the old system.
+
+*   Your system clock must be approximately correct (within about 20 minutes 
+    of the true time), or you won't be able to connect to friends.
+
+*   Your public key does not change when upgrading to this new system, it's 
+    just printed differently. You do not need to re-add existing friends.
+
+*   You can add new friends who are using an old client which still uses 
+    hex-encoded addresses, but they can not add you.
+
+## API changes
+### Invitations and invite codes
+In the API, the new addresses are termed as `invitations`, and the variable 
+second part (the analogue of nospam) is termed the `invite_code`. The API 
+functions and constants to handle these are mostly parallel to those in the 
+old API:
+
+* `tox_friend_add_invitation` is the analogue of `tox_friend_add`; it takes an 
+  invitation of length `TOX_INVITATION_SIZE` and a friend request message.
+
+* `tox_self_get_invitation`, and respectively `tox_self_get_invite_code`, 
+  writes our current invitation of length `TOX_INVITATION_SIZE`, respectively 
+  `TOX_INVITE_CODE_SIZE`, or an error if no invite code is set.
+
+* `tox_self_new_invite_code` generates a new random invite code.
+
+* The existing `address` and `nospam` API functions are deprecated.
+
+* The old `tox_friend_add` function is deprecated, but can be called by the 
+  non-deprecated identifier `tox_friend_add_legacy_address`, with 
+  `TOX_LEGACY_ADDRESS_SIZE` in place of `TOX_ADDRESS_SIZE`.
+
+* The user may wish to disable invitations entirely, to save on network 
+  traffic.
+  `tox_self_delete_invite_code` disables invitations; once this is called, 
+  until `tox_self_new_invite_code` is called,
+  `tox_self_get_invite_code` and `tox_self_get_invitation` and 
+  `tox_self_encode64_invitation` will return errors.
+  The user's public key should then be displayed in place of their invitation; 
+  see `tox_self_encode64_public_key` below.
+
+The use of the term `invitation` rather than "address" in the API is just to 
+avoid conflict with the legacy API; they should be described to the user as 
+addresses. It is probably best to avoid referring specifically to the 
+`invite_code` part of the address, but when necessary it can be called the 
+"invite code" (or even the "nospam", for those familiar with the old system). 
+Generating a new invite code can be referred to as "changing address".
+
+### Encoding and decoding URIs
+As a convenience, new API functions are provided to perform the 
+encoding/decoding for the URI form of the invitation and public key.
+(The data encoding scheme is base64url with the 64 characters `0-9a-zA-Z_-`.)
+
+* `tox_self_encode64_invitation` returns an ASCII string of length 
+  `TOX_INVITATION_URI_SIZE` of the form
+```
+tox:FMZVriPO5aiZaQWmA4CQrog2msqt6y6j_fOxPUw-4CE?uvuNcPsjJOvlfODpC-dUEQ .
+```
+
+* `tox_self_encode64_public_key` returns an ASCII string of length 
+  `TOX_PUBLIC_KEY_URI_SIZE` of the form
+```
+tox:FMZVriPO5aiZaQWmA4CQrog2msqt6y6j_fOxPUw-4CE .
+```
+
+* Conversely, `tox_friend_decode64_invitation` takes a string and its length, 
+  and writes an address or returns an error. The `tox:` URI scheme prefix may 
+  be omitted in the string. `tox_friend_decode64_public_key` is similar.
+  `tox_friend_decode_legacy_address` similarly decodes a legacy hex-encoded 
+  address. 
+
+Intended behaviour when the user provides a string (perhaps in a qr code) to 
+be added as a friend is to use the above decode functions to interpret the 
+string as an invitation or a legacy address or a public key, and 
+correspondingly call
+`tox_friend_add_invitation` or `tox_friend_add_legacy_address` or
+`tox_friend_add_norequest` if decoding is successful (perhaps after prompting 
+for a friend request message in the first two cases).
+
+## Remark on IP addresses
 As with other parts of the tox protocol (namely, finding friends by DHT 
 pubkey, hole punching, and connecting to friends via a TCP server), the DHT 
 Announcements system makes no attempt to prevent third parties from observing 
@@ -40,23 +138,6 @@ users must rely on existing techniques to minimise the extent to which an IP
 address identifies a user, such as regular permutation of IP addresses within 
 a large pool, mitigation of tracking techniques like http cookies, and 
 anonymising relays such as Tor or VPNs.
-
-## User-visible changes
-
-Unlike the onion, DHT Announcements do not support friend requests. Instead, 
-to add a friend, you add their ToxID and they add yours.
-
-Alternatively, you can create an 'invite code' and send it out-of-band to a 
-friend, who can then use it to add you without you having to know their ToxID.
-Similarly, bots can set things up so that anyone can add them.
-
-This system does not use any "nospam" -- the ToxID of a peer is just their 
-long-term ID public key with a checksum. This makes it easy to introduce 
-existing friends to each other.
-
-There should be considerable bandwidth reductions in typical usage.
-
-The user's system clock must be reasonably close to the correct time.
 
 ## High-level description of the system
 DHT nodes permit storing small quantities of world-readable data, termed
@@ -69,12 +150,12 @@ long-term identity based on the location. To prevent tracking us across
 sessions based on where we announce, the locations vary with time. When making 
 the first connection with a new friend, the location is derived from the 
 combined key based on our ID keypairs. To keep the costs of announcements 
-under control, for subsequent connections to the friend we announce only to a 
-"shared" announcement location which is used for all such friends.
+under control, for subsequent connections to the friend we announce primarily
+to a "shared" announcement location which is used for all such friends.
 
-In a separate mode intended for bots, peers can also announce at a "public" 
-announcement location which is just the peers's ID public key, giving up all 
-privacy guarantees in exchange for allowing arbitrary peers to find them.
+Peers can also make "invite" announcements, allowing them to receive friend 
+requests from, and be tracked by, those with whom they share the corresponding 
+invite code.
 
 # Announcements
 
@@ -408,12 +489,11 @@ announced really is our current connection info, and yet no-one else can link
 the announcement to our long-term ID, nor track changes to our DHT pubkey and 
 IP address across sessions.
 
-In fact, only individual announcements are required for core functionality, 
-and a first implementation could reasonably ignore shared and invite 
-announcements. The purpose of shared announcements is to keep network traffic 
-requirements under control. The purpose of invite announcements is to allow 
-"promiscuity", which is required for public bots and can simplify the process 
-of adding friends.
+In fact, only individual announcements are required for core functionality. 
+The purpose of shared announcements is to keep network traffic requirements 
+under control. The purpose of invite announcements is to allow "promiscuity", 
+which is required for public bots and can simplify the process of adding 
+friends.
 
 ## Timed hashes
 Fix constants $M < P$ ("margin", and "period"), measured in seconds.
@@ -521,72 +601,44 @@ have our current shared signing pubkey, and we make individual announcements
 for each of our other friends. We can not be certain that a friend who 
 previously received our shared key will still have it subsequently, since they 
 might for various exceptional reasons have reverted to an earlier save state. 
-So as a precaution, we also make ``low-intensity'' individual announcements 
-for such friends.
-
-### Security notes
-Our friends can interfere with our shared announcements -- either by occupying 
-the neighbourhood of the announcement pubkey on the DHT and behaving 
-maliciously (e.g. accepting our announce requests but not actually storing the 
-announce), or simply by overwriting our announcements. The latter technique 
-could be prevented at the cost of complicating the protocol, but the former is 
-inevitable.
-
-Our friends can also easily determine our other friends' IP addresses and DHT 
-pubkeys by listening at the shared announcement pubkey.
+So as a precaution, we also make "low-intensity" individual announcements for 
+such friends.
 
 ## Invite announcements
-An **invite code** is the public key of an Ed25519 signing keypair. A 
-corresponding **invite announcement** is made exactly as in the case of a 
-shared announcement, except that our ID pubkey is included along with the 
-timestamped connection info in the encrypted part of the announcement.
+An **invite code** is the first 16 bytes of the SHA256 hash of the public key 
+of an Ed25519 signing keypair, called the **invite keypair**.
+
+Our corresponding **invite announcement** consists of a random nonce and then 
+the XSalsa20Poly1305 authenticated encryption, using the nonce and the SHA256 
+hash of the invite code as an symmetric encryption key, of the following:
+the public key of the invite keypair and the following signed with the invite 
+keypair:
+our ID pubkey and our timestamped connection info.
+
+The invite announcement is announced with announcement secret key(s) the timed 
+hashes of the invite code.
 
 A peer who knows the invite code proceeds as follows. They find and decrypt 
-the announcement, checking the signature, to obtain our connection info. They 
-then use this to send an **Invite Accept** packet to us; this is sent on the 
-DHT in a DHT Request packet (i.e. routed via a DHT node we are connected to) 
-and/or via TCP OOB packets on TCP relays we are connected to. The Invite 
-Accept packet they send to us consists of their ID pubkey, a random nonce, 
-and, authenticatedly encrypted to our ID pubkey using their ID pubkey and the 
-nonce, the invite code and their connection info. On receiving an Invite 
-Accept packet containing a valid invite code, we add the ID pubkey as a 
-friend, and may use the connection info to connect to them.
+the announcement, checking the signature, to obtain our ID pubkey and 
+connection info. They then use this to send a **Friend Request** packet to us; 
+this is sent on the DHT in a DHT Request packet (i.e. routed via a DHT node we 
+are connected to) and/or via TCP OOB packets on TCP relays we are connected 
+to. The Friend Request packet they send to us consists of a UTF8 encoded 
+friend request message prepended by a length (which may be 0), their ID 
+pubkey, a random nonce, and, authenticatedly encrypted to our ID pubkey using 
+their ID pubkey and the nonce, the invite code. A Friend Request packet 
+containing a valid invite code triggers a callback, as in the current system.
 
-### Usage
-We generate an invite code and send it out-of-band to some limited set of 
-people. A common instance of this is asking someone who does not use tox to 
-install it and find you on the network. 
+## Security notes
+Anyone who knows our shared signing pubkey or our invite code can interfere 
+with the corresponding announcements -- either by occupying the neighbourhood 
+of the announcement pubkey on the DHT and behaving maliciously (e.g. accepting 
+our announce requests but not actually storing the announce), or simply by 
+overwriting our announcements. The latter technique could be prevented at the 
+cost of complicating the protocol, but the former is inevitable.
 
-In terms of friend requests, an invite announcement is analogous to giving out 
-a ToxID with a nospam and accepting every friend request obtained without 
-checking the sender.
-
-Invite codes can have validity limited in time and in the number of peers who 
-can use it; 1 day and 1 peer might be sensible defaults. We consider an invite 
-code to be used by a peer when we have connected to them and sent them our 
-shared key.
-
-One big problem with invite announcements is that it is difficult to explain 
-to the user the privacy consequences of the invite code being leaked. This 
-could be mitigated somewhat by warning against loose time/user limits. Another 
-problem is the additional complexity in the user interface -- it requires a 
-means to supply an invite code on adding a friend (while making it clear that 
-supplying one might not be necessary), and a means to generate invite codes. 
-Preferably there would also be an indication of any active invite codes and 
-the option to cancel them or extend their validity.
-
-### Public announcements
-Public bots typically want to accept all connections. This can be implemented 
-by distributing an invite code with no limit on its validity. We term as 
-**public announcements** the corresponding invite announcements.
-
-When someone connects to us via a public announcement, we do not send them our 
-shared signing key; as a result, they will continue to use the public 
-announcement to find us in the future, and we need make no other announcement.
-
-Note that as discussed for shared keys, it is easy for anyone who knows the 
-public invite code to prevent the public announcement and/or to determine the 
-IP addresses of those searching for it.
+They can also easily determine our IP address and the IP address of anyone 
+searching for the announcement, by listening at the announcement pubkey.
 
 # Announcing and searching
 
@@ -669,7 +721,7 @@ saving across sessions. Once this exceeds 64 hours, we switch to a
 low-intensity mode; this simply means that we reduce the size of the list from 
 8 to 2, with at most 1 non-open node.
 
-The ``low-intensity'' individual announcements made alongside a shared 
+The "low-intensity" individual announcements made alongside a shared 
 announcement use this low-intensity mode from the start, and moreover do not 
 start until the shared announcement is announced.
 
@@ -677,9 +729,12 @@ start until the shared announcement is announced.
 For each offline friend, we search for its announcements using forwarded Data 
 Search and Data Retrieve requests.
 
-We search for the friend's shared announcement if we have a shared signing key 
-for it, else for its invite announcement if we have an invite code for it, 
-else for the individual announcement.
+If the friend was added with an invite code and we have not yet connected to 
+the friend (see `FRIEND_CONFIRMED` in `Messenger.h`), we search for its invite 
+announcement.
+
+Otherwise, we search for the friend's shared announcement if we have a shared 
+signing key for it, else for the individual announcement.
 
 We ensure we are announced for the friend before beginning to search for it.
 
@@ -737,60 +792,3 @@ We don't announce via the onion, nor generate or expose any nospam.
 Preferably, clients should indicate which friends are using the legacy onion 
 system, and warn the user of the privacy implications of this (so the user 
 will exhort their friends to upgrade).
-
-# API
-A separate list of Invites is kept by Messenger, consisting of invite codes we 
-have generated and are announcing for. Each contains a timeout and a maximum 
-number of uses. This invite list is exposed with a parallel API to that for 
-the friend list, including functions to add and delete invites. Expired 
-invites are deleted immediately.
-
-A new API function allows adding a new friend with just an invite key. 
-`tox_friend_get_real_pk()` will return error on such a friend, until its 
-public key has been found. A new API function gets the invite key of such a 
-friend, which remains valid permanently, and returns an error if called on a 
-friend who was added with the existing API functions.
-
-# Suggested user interface
-(This is written with a non-minimalist GUI in mind, such as qTox; other 
-clients may want to follow the general pattern but cut the handholding.)
-
-The invite list is presented at the top of the friend list. Selecting an 
-invite shows the invite code and its timeout, and short instructions along the 
-lines of "Attempting to connect to new friend; they should enter the following 
-code into their tox client:". A "cancel invitation" button is shown to allow 
-deleting the invitation, and the invitation can also be deleted by a means 
-parallel to that used for deleting friends. If the client allows setting 
-friend nicknames, it should similarly allow setting a nickname for an invite, 
-which will then transfer to any friend added using it (determined by checking 
-the `invite_key` of new friends in the friendlist).
-
-A friend with no public key should have its `invite_key` shown instead. When 
-selected, there should be some explanation, along the lines of "Attempting to 
-accept new friend invitation (the friend must be online)".
-
-If a friend has a public key but has never been seen (i.e. 
-`tox_get_friend_last_online()` returns `UINT64_MAX`), when selected there 
-should be an explanation along the lines of "Attempting to connect to new 
-friend; they must add your Tox ID in their tox client, and must be online". 
-Your Tox ID should be easily accessible (e.g. shown on clicking on and/or 
-mousing over the words "Tox ID").
-
-The "add friend" box should accept both (nospamless) Tox IDs and invite codes. 
-The former are added with `tox_friend_add_norequest()`, the latter with the 
-new API function discussed above. There needs to be a cross-client standard on 
-how to render an invite code as a string in a way which differentiates it from 
-a Tox ID. For example, invite codes could be hex-encoded with a checksum as 
-for Tox IDs, but prefixed with the string "inv". We could also consider 
-allowing Base64 encodings for invite codes, and perhaps even for nospamless 
-Tox IDs.
-
-Where our ToxID is shown, there should be an "invite new friend" button which 
-creates a new one-shot invite (with timeout configured in advanced options and 
-with a reasonable default, perhaps 30 days) and then selects the newly created 
-invite.
-
-The ability to create invites with other settings, even public invites, could 
-also be presented -- but shouldn't be forefronted, and should preferably come 
-with a warning explaining that those who know an active invite code can use it 
-to track you by IP address and determine the IP addresses of your friends.
