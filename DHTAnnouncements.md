@@ -59,6 +59,32 @@ constraints on possible replacements.
 *   You can add new friends who are using an old client which still uses 
     hex-encoded addresses, but they can not add you.
 
+## High-level description of the system
+DHT nodes permit storing small quantities of world-readable data, termed
+"announcements". Using this, we "announce" ourselves by placing our connection 
+info on the DHT for our friends to find. These announcements are encrypted 
+such that only the intended recipient(s) can read them, and signed where 
+appropriate. The DHT locations of these announcements are determined in such a 
+way that the intended recipients can find them, but others can't determine our 
+long-term identity based on the location. To prevent tracking us across 
+sessions based on where we announce, the locations vary with time.
+
+Our tox address specifies one such announce location. Using this, those who 
+know our address can find us and send us a friend request. This location is 
+also used by existing friends to find us, and we make individual announcements 
+for friends who may not have our latest tox address.
+
+## Remark on IP addresses
+As with other parts of the tox protocol (namely, finding friends by DHT 
+pubkey, hole punching, and connecting to friends via a TCP server), the DHT 
+Announcements system makes no attempt to prevent third parties from observing 
+pairs of IP addresses being used by tox friends. An attacker with moderate 
+resources could accumulate a lot of such information. To protect against this, 
+users must rely on existing techniques to minimise the extent to which an IP 
+address identifies a user, such as regular permutation of IP addresses within 
+a large pool, mitigation of tracking techniques like http cookies, and 
+anonymising relays such as Tor or VPNs.
+
 ## API changes
 ### Invitations and invite codes
 In the API, the new addresses are termed as `invitations`, and the variable 
@@ -131,32 +157,6 @@ correspondingly call
 `tox_friend_add_invitation` or `tox_friend_add_legacy_address` or
 `tox_friend_add_norequest` if decoding is successful (perhaps after prompting 
 for a friend request message in the first two cases).
-
-## Remark on IP addresses
-As with other parts of the tox protocol (namely, finding friends by DHT 
-pubkey, hole punching, and connecting to friends via a TCP server), the DHT 
-Announcements system makes no attempt to prevent third parties from observing 
-pairs of IP addresses being used by tox friends. An attacker with moderate 
-resources could accumulate a lot of such information. To protect against this, 
-users must rely on existing techniques to minimise the extent to which an IP 
-address identifies a user, such as regular permutation of IP addresses within 
-a large pool, mitigation of tracking techniques like http cookies, and 
-anonymising relays such as Tor or VPNs.
-
-## High-level description of the system
-DHT nodes permit storing small quantities of world-readable data, termed
-"announcements". Using this, we "announce" ourselves by placing our connection 
-info on the DHT for our friends to find. These announcements are encrypted 
-such that only the intended recipient(s) can read them, and signed where 
-appropriate. The DHT locations of these announcements are determined in such a 
-way that the intended recipients can find them, but others can't determine our 
-long-term identity based on the location. To prevent tracking us across 
-sessions based on where we announce, the locations vary with time.
-
-Our tox address specifies one such announce location. Using this, those who 
-know our address can find us and send us a friend request. This location is 
-also used by existing friends to find us, and we make individual announcements 
-for friends who may not have our latest tox address.
 
 # Announcements
 
