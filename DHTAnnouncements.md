@@ -71,7 +71,7 @@ old API:
 
 * `tox_self_get_invitation`, and respectively `tox_self_get_invite_code`, 
   writes our current invitation of length `TOX_INVITATION_SIZE`, respectively 
-  `TOX_INVITE_CODE_SIZE`, or an error if no invite code is set.
+  `TOX_INVITE_CODE_SIZE`.
 
 * `tox_self_new_invite_code` generates a new random invite code.
 
@@ -80,15 +80,6 @@ old API:
 * The old `tox_friend_add` function is deprecated, but can be called by the 
   non-deprecated identifier `tox_friend_add_legacy_address`, with 
   `TOX_LEGACY_ADDRESS_SIZE` in place of `TOX_ADDRESS_SIZE`.
-
-* The user may wish to disable invitations entirely, to save on network 
-  traffic.
-  `tox_self_delete_invite_code` disables invitations; once this is called, 
-  until `tox_self_new_invite_code` is called,
-  `tox_self_get_invite_code` and `tox_self_get_invitation` and 
-  `tox_self_encode64_invitation` will return errors.
-  The user's public key should then be displayed in place of their invitation; 
-  see `tox_self_encode64_public_key` below.
 
 The use of the term `invitation` rather than "address" in the API is just to 
 avoid conflict with the legacy API; they should be described to the user as 
@@ -115,8 +106,8 @@ tox:FMZVriPO5aiZaQWmA4CQrog2msqt6y6j_fOxPUw-4CE .
 ```
 
 * Conversely, `tox_friend_decode_invitation` takes a string and its length, 
-  and writes an address or returns an error. The `tox:` URI scheme prefix may 
-  be omitted in the string. `tox_friend_decode_public_key` is similar.
+  and writes an address. The `tox:` URI scheme prefix may be omitted in the 
+  string. `tox_friend_decode_public_key` is similar.
   `tox_friend_decode_legacy_address` similarly decodes a legacy hex-encoded 
   address. 
 
@@ -160,15 +151,12 @@ such that only the intended recipient(s) can read them, and signed where
 appropriate. The DHT locations of these announcements are determined in such a 
 way that the intended recipients can find them, but others can't determine our 
 long-term identity based on the location. To prevent tracking us across 
-sessions based on where we announce, the locations vary with time. When making 
-the first connection with a new friend, the location is derived from the 
-combined key based on our ID keypairs. To keep the costs of announcements 
-under control, for subsequent connections to the friend we announce primarily
-to a "shared" announcement location which is used for all such friends.
+sessions based on where we announce, the locations vary with time.
 
-Peers can also make "invite" announcements, allowing them to receive friend 
-requests from, and be tracked by, those with whom they share the corresponding 
-invite code.
+Our tox address specifies one such announce location. Using this, those who 
+know our address can find us and send us a friend request. This location is 
+also used by existing friends to find us, and we make individual announcements 
+for friends who may not have our latest tox address.
 
 # Announcements
 
@@ -489,13 +477,12 @@ an unsigned 64-bit timestamp set to the unix time at which our connection info
 was last updated, followed by our connection info. The timestamp should change 
 only when the connection info changes.
 
-There are three kinds of announcement: individual announcements, shared 
-announcements, and invite announcements. In each case, an announcement secret 
-key will be obtained by combining the time of the announcement with a secret 
-shared only by those the announcement is intended for, and the announcement 
-public key will be that derived from the secret key. The differences are in 
-the choice of secret, and in how the connection info is encrypted and/or 
-signed in the announcement.
+There are two kinds of announcement: individual announcements and invite 
+announcements. In each case, an announcement secret key will be obtained by 
+combining the time of the announcement with a secret shared only by those the 
+announcement is intended for, and the announcement public key will be that 
+derived from the secret key. The differences are in the choice of secret, and 
+in how the connection info is encrypted and/or signed in the announcement.
 
 The intention is that the intended parties can be assured that what is 
 announced really is our current connection info, and yet no-one else can link 
@@ -503,10 +490,9 @@ the announcement to our long-term ID, nor track changes to our DHT pubkey and
 IP address across sessions.
 
 In fact, only individual announcements are required for core functionality. 
-The purpose of shared announcements is to keep network traffic requirements 
-under control. The purpose of invite announcements is to allow "promiscuity", 
-which is required for public bots and can simplify the process of adding 
-friends.
+The purpose of invite announcements is to keep network traffic requirements 
+under control, and to allow certain peers to send us friend requests, which is 
+required for public bots and can simplify the process of adding friends.
 
 ## Timed hashes
 Fix constants $M < P$ ("margin", and "period"), measured in seconds.
@@ -576,47 +562,6 @@ This is announced with announcement secret key(s) the timed hashes of the
 result of symmetrically encrypting A's ID pubkey with the combined key of A 
 and B, using A's ID pubkey as the nonce.
 
-## Shared announcements
-Each peer generates a **shared signing keypair**. This is an Ed25519 signing 
-keypair. It is saved across sessions, and changes only as described below.
-
-We send our shared signing pubkey to all our friends, sending it to a 
-friend whenever we establish a friend connection with them. When we delete a 
-friend, we generate a new shared signing keypair, delete the old one, 
-and send the new one to all currently connected friends.
-
-Friends confirm receipt of shared signing pubkeys, and we keep track of 
-which friends have confirmed that they have our current shared signing 
-pubkey.
-
-We save across sessions the latest shared signing pubkey we have received from 
-each friend.
-
-Shared signing pubkeys are to be treated as *secret* information, not to be 
-shared with anyone except as described above.
-
-Our **shared announcement** consists of a random nonce followed by our 
-timestamped connection info signed with our shared signing keypair, and then 
-authenticatedly encrypted with the nonce using the shared signing public key 
-as a symmetric encryption key. The symmetric authenticated encryption 
-algorithm for this purpose is XSalsa20Poly1305 (`crypto_secretbox` in NaCl).
-
-The encryption prevents the node where the announcement is stored from reading 
-the announcement (which may contain information, such as timestamps and our 
-choice of TCP relays, which might be used to identify us), while the signature 
-prevents our friends from faking an announcement for us.
-
-Our shared announcement is announced with announcement secret key(s) the timed 
-hashes of our shared signing pubkey.
-
-We make a shared announcement as long as at least one friend is believed to 
-have our current shared signing pubkey, and we make individual announcements 
-for each of our other friends. We can not be certain that a friend who 
-previously received our shared key will still have it subsequently, since they 
-might for various exceptional reasons have reverted to an earlier save state. 
-So as a precaution, we also make "low-intensity" individual announcements for 
-such friends.
-
 ## Invite announcements
 An **invite code** is the first 16 bytes of the SHA256 hash of the public key 
 of an Ed25519 signing keypair, called the **invite keypair**.
@@ -628,27 +573,49 @@ the public key of the invite keypair and the following signed with the invite
 keypair:
 our ID pubkey and our timestamped connection info.
 
+The encryption prevents the node where the announcement is stored from reading 
+the announcement (which may contain information, such as timestamps and our 
+choice of TCP relays, which might be used to identify us), while the signature 
+prevents those who know the invite code from faking an announcement for us.
+
 The invite announcement is announced with announcement secret key(s) the timed 
 hashes of the invite code.
 
-A peer who knows the invite code proceeds as follows. They find and decrypt 
-the announcement, checking the signature, to obtain our ID pubkey and 
-connection info. They then use this to send a **Friend Request** packet to us; 
-this is sent on the DHT in a DHT Request packet (i.e. routed via a DHT node we 
-are connected to) and/or via TCP OOB packets on TCP relays we are connected 
-to. The Friend Request packet they send to us consists of a UTF8 encoded 
-friend request message prepended by a length (which may be 0), their ID 
-pubkey, a random nonce, and, authenticatedly encrypted to our ID pubkey using 
-their ID pubkey and the nonce, the invite code. A Friend Request packet 
-containing a valid invite code triggers a callback, as in the current system.
+A peer who knows the invite code can use it to send us a friend request, as 
+follows. They find and decrypt the announcement, checking the signature, to 
+obtain our ID pubkey and connection info. They then use this to send a 
+**Friend Request** packet to us; this is sent on the DHT in a DHT Request 
+packet (i.e. routed via a DHT node we are connected to) and/or via TCP OOB 
+packets on TCP relays we are connected to. The Friend Request packet they send 
+to us consists of a UTF8 encoded friend request message prepended by a length 
+(which may be 0), their ID pubkey, a random nonce, and, authenticatedly 
+encrypted to our ID pubkey using their ID pubkey and the nonce, the invite 
+code. A Friend Request packet containing a valid invite code triggers a 
+callback, as in the current system.
+
+For subsequent connections, friends also look for our invite announcement to 
+obtain our current connection info. To enable this, we send our current invite 
+code to a friend whenever we establish a friend connection with them.
+We keep track of which friends we have sent our current invite code to.
+We save across sessions the latest invite code we have received from each 
+friend.
+
+We make individual announcements for each friend to whom we have not sent our 
+current invite code. We can expect our other friends to be able to find our 
+invite announcement; however, we can not be certain that such a friend will 
+still have the invite code we sent, even if they did receive it, since they 
+might for various exceptional reasons have reverted to an earlier save state. 
+There is also the possibility that our invite announcement could fail due e.g. 
+to a DoS attack. So as a precaution, we also make "low-intensity" individual 
+announcements for such friends.
 
 ## Security notes
-Anyone who knows our shared signing pubkey or our invite code can interfere 
-with the corresponding announcements -- either by occupying the neighbourhood 
-of the announcement pubkey on the DHT and behaving maliciously (e.g. accepting 
-our announce requests but not actually storing the announce), or simply by 
-overwriting our announcements. The latter technique could be prevented at the 
-cost of complicating the protocol, but the former is inevitable.
+Anyone who knows our invite code can interfere with the invite announcement -- 
+either by occupying the neighbourhood of the announcement pubkey on the DHT 
+and behaving maliciously (e.g. accepting our announce requests but not 
+actually storing the announce), or simply by overwriting our announcements. 
+The latter technique could be prevented at the cost of complicating the 
+protocol, but the former is inevitable.
 
 They can also easily determine our IP address and the IP address of anyone 
 searching for the announcement, by listening at the announcement pubkey.
@@ -734,9 +701,9 @@ saving across sessions. Once this exceeds 64 hours, we switch to a
 low-intensity mode; this simply means that we reduce the size of the list from 
 8 to 2, with at most 1 non-open node.
 
-The "low-intensity" individual announcements made alongside a shared 
-announcement use this low-intensity mode from the start, and moreover do not 
-start until the shared announcement is announced.
+The "low-intensity" individual announcements used as a back-up alongside the 
+invite announcement use this low-intensity mode from the start, and moreover 
+do not start until the invite announcement is announced.
 
 ## Searching
 For each offline friend, we search for its announcements using forwarded Data 
@@ -746,8 +713,8 @@ If the friend was added with an invite code and we have not yet connected to
 the friend (see `FRIEND_CONFIRMED` in `Messenger.h`), we search for its invite 
 announcement.
 
-Otherwise, we search for the friend's shared announcement if we have a shared 
-signing key for it, else for the individual announcement.
+Otherwise, we search for the friend's invite announcement if we have an invite 
+code for it, else for the individual announcement.
 
 We ensure we are announced for the friend before beginning to search for it.
 
@@ -768,11 +735,10 @@ decrypt it and/or check the signature as appropriate, and if it is valid and
 the timestamp is greater than that on any previous announcement we obtained 
 for the friend, we pass the connection info to the appropriate modules.
 
-Because it is possible that we have an outdated shared signing key or invite 
-code for the friend, when we search for a shared/invite announcement we also 
-search for the individual announcement (if we know the friend's ID pubkey), 
-with the same process but without the initial period of a high rate of 
-requests.
+Because it is possible that we have an outdated invite code for the friend, 
+when we search for a invite announcement we also search for the individual 
+announcement, with the same process but without the initial period of a high 
+rate of requests.
 
 ## Finding announce nodes
 We term as **announce nodes** those DHT nodes who implement the DHT 
