@@ -101,6 +101,12 @@ old API:
 
 * `tox_self_new_invite_code` generates a new random invite code.
 
+* `tox_self_get_invite_private_key` obtains the private key from which the 
+  current invite code is derived, and `tox_self_set_invite_private_key` sets 
+  the private key and hence the invite code. These functions are provided 
+  primarily to allow clients to offer to undo a call to 
+  `tox_self_new_invite_code`.
+
 * The existing `address` and `nospam` API functions are deprecated.
 
 * The old `tox_friend_add` function is deprecated, but can be called by the 
