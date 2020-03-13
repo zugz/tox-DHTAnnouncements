@@ -886,3 +886,57 @@ else make sure not to let the friend search rate get too low.
 Preferably, clients should indicate which friends are using the legacy onion 
 system, and warn the user of the privacy implications of this (so the user 
 will exhort their friends to upgrade).
+
+# Traffic estimates
+Typical IPv4 UDP = 28 + data
+DHT packet = 28 + 80 + payload = 108 + payload
+Data Search = 108 + 32 = 140
+Data Search Response <= 108 + 303 = 411
+Announcement <= 386
+Store initial announcement = 108 + 56 + 53 + Announcement <= 603
+Store reannouncement = 108 + 56 + 53 + 32 = 249
+Store response = 108 + 36 = 144
+
+Forward packet overheads: negligible, so in the below we simply multiply costs 
+by 2 to account for the forwarding, assuming an average forward chain length 
+of 1. This is averaging over the whole network; in fact TCP-only leeches 
+forward nothing, nodes behind restrictive NAT do some forwarding, and nodes 
+behind full cone or no NAT (bless them) do a lot.
+
+The numbers below are very rough estimates, with wholly spurious precision.
+
+Initial lookup:
+Takes say 5 steps with 8 searches in each.
+(5 steps is a rough estimate derived from observing DHT lookups on the tox 
+network as it exists at the time of writing; the number of steps required 
+increases logarithmically with the size of the network.)
+Each step comprises a search and response, forwarded, so the lookup costs
+`5 * 8 * 2 * (140 + 411) = 44080`.
+
+Announcing:
+Storing the announcement on 8 nodes costs another
+`8 * 2 * (603+144) = 11952`. So initial cost estimate is
+`44080 + 11952 = 56032`.
+
+Once we are announced to all 8 nodes, assuming no churn, each 120s we send a 
+Data Search request and then a reannouncement, at a cost of
+`8 * 2 * (140+411+249+144) = 15104` per 120s, so 125Bps.
+
+Searching:
+`<=9` searches per node in first 60s;
+`9 + \log_{5/4}(t/60)` searches per node in first t seconds.
+Averaging over first 1800 seconds: `24 * 8816 / 1800 = 118Bps`.
+Rate at 1800 seconds: `8816 / (1800 / 4) = 20Bps`.
+
+Churn:
+A very rough estimate of the effect of churn could be that it causes traffic 
+equivalent to the initial costs of lookup and announcement once per 900s. (I 
+have no data to back this estimate up, it may be way off.)
+That would lead to a churn cost of 62Bps for an announcement and 49Bps for a 
+search.
+
+These numbers seem to be suggesting total costs of around 0.2-2KBps.
+
+TODO: we could nearly halve maintenance costs by allowing the Data Search 
+packet to include a hash of a previous response, and having a short version of 
+the response packet which just confirms that the hash is still current.
