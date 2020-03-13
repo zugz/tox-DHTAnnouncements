@@ -266,7 +266,7 @@ These packets form an RPC DHT Packet pair.
 |:-------------|:-------------|:--------------------------|
 | `32`         | Public Key   | Announcement public key   |
 | `24`         | Nonce        | Random nonce              |
-| `[49,561]`   | Bytes        | Encrypted payload         |
+| `[53,565]`   | Bytes        | Encrypted payload         |
 
 The payload is authenticated and encrypted with the announcement secret key 
 and the recipient's DHT public key and the given nonce, and consists of a Ping 
