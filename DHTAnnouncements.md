@@ -226,7 +226,7 @@ below), the sendback.
 The timeout of this timed authenticator is 60s.
 
 The nodes returned are those announce nodes (at most 4) closest to the Data 
-Public Key known by the responding node (see [Finding announce nodes]).
+Public Key known by the responding node (see [Announce nodes]).
 
 Note: as with Nodes requests, this part of the protocol is susceptible to UDP 
 amplification abuse. Including all overheads (8 bytes for RPC Packet, 72 for 
@@ -356,9 +356,9 @@ replacing the use of the onion there.
 If a peer wishes to send a packet to a destination via a forwarder which is a 
 DHT node, they send a Forward Request packet containing the packet and the DHT 
 key of the destination. The forwarder sends a Forwarding packet to the 
-destination, if it's in their close list. The destination replies by sending a 
-Forward Reply packet to the forwarder, and the forwarder then sends a 
-Forwarding packet back to original sender. In the Forwarding packet, the 
+destination, if it's in their DHT node lists. The destination replies by 
+sending a Forward Reply packet to the forwarder, and the forwarder then sends 
+a Forwarding packet back to original sender. In the Forwarding packet, the 
 forwarder includes a "sendback" to be included in the reply, which tells the 
 forwarder how to route the reply.
 
@@ -373,15 +373,29 @@ IP/Port and sendback of the Forwarding packet with which the Forward Request
 was delivered, and handle a Forward Reply by sending its data in another 
 Forward Reply to that source. The intended use for this is to allow nodes who 
 are not able to use UDP to send announce requests, by forwarding the request 
-via a TCP relay and a DHT node close to the destination node. Note that 
+via a TCP relay and a DHT node close to the destination node. The only bound 
+on the length of such a chain is that the sendback grows with each step and 
+has bounded size; the protocol requires the sendbacks to grow slowly enough 
+that chains involving a TCP relay and 4 DHT forwarders will work. Note that 
 chaining forward requests can not be used to implement onion routing, due to 
-the lack of encryption.
+the lack of encryption at intermediate steps.
 
 To prevent abuse, each sendback should include a timed authenticator, and this 
 should be validated before accepting a Forward Reply. The timeout for this 
 timed authenticator should be reasonably long, say 3600s, since a change in 
 the sendback between forwarding a Search Request and a corresponding Retrieve 
 Request will cause the Retrieve Request to fail.
+
+```
+    (TCP) Forward Request   Forwarding           Forwarding
+          [FR+Req]         [SB1+FR+Req]        [SB2+SB1+Req]
+    A ---------------> F1 ---------------> F2 ---------------> B
+
+
+      (TCP) Forwarding      Forwarding         Forward Reply
+           [Resp]           [SB1+Resp]         [SB2+SB1+Resp]
+    A <--------------- F1 <--------------- F2 <--------------- B
+```
 
 #### Forward Request Packet
 This is sent as the payload of a Protocol packet.
@@ -396,7 +410,8 @@ with the given pubkey in its DHT close list, and on success send a Forwarding
 packet to that node, with data copied from that in the current packet, and 
 with a sendback which indicates the IP/Port of the source of the current 
 packet and, if the packet was received in a Forwarding packet, the sendback 
-from that packet.
+from that packet. The total length of the sendback should be at most 52 bytes 
+plus the size of any existing sendback.
 
 Note that a node's close list does not include the node itself.
 
@@ -454,16 +469,16 @@ packet.
 
 This is sent to a TCP server by a TCP client in an encrypted data packet. The 
 TCP server should treat it as a Forward Request, and send a Forwarding packet 
-to the addressee IP/Port, with sendback which should uniquely identify the TCP 
-client to the TCP server.
+to the addressee IP/Port, with a sendback which should uniquely identify the 
+TCP client to the TCP server. The sendback should be at most 46 bytes.
 
-If the addressee port is <1024, the packet should be ignored. This is to 
-reduce the potential for abuse.
+If the addressee port is <1024, or if the addressee IP address is not 
+publically routable, the packet should be ignored. This is to reduce the 
+potential for abuse.
 
-NOTE: adding a new TCP packet type like this comes with the problem that old 
-TCP servers who don't recognise it will consider it an error and close the 
-connection. Solution: extend the TCP relay handshake to include a protocol 
-version number.
+Note that TCP servers running older versions of toxcore will close the 
+connection to the client on receiving this packet. TODO: probably we should 
+deal with this by adding versioning in the TCP relay handshake.
 
 #### TCP Forwarding
 | Length   | Type      | Contents       |
@@ -606,16 +621,7 @@ We keep track of which friends we have sent our current invite code to.
 We save across sessions the latest invite code we have received from each 
 friend.
 
-We make individual announcements for each friend to whom we have not sent our 
-current invite code. We can expect our other friends to be able to find our 
-invite announcement; however, we can not be certain that such a friend will 
-still have the invite code we sent, even if they did receive it, since they 
-might for various exceptional reasons have reverted to an earlier save state. 
-There is also the possibility that our invite announcement could fail due e.g. 
-to a DoS attack. So as a precaution, we also make "low-intensity" individual 
-announcements for such friends.
-
-## Security notes
+### Security notes
 Anyone who knows our invite code can interfere with the invite announcement -- 
 either by occupying the neighbourhood of the announcement pubkey on the DHT 
 and behaving maliciously (e.g. accepting our announce requests but not 
@@ -628,126 +634,229 @@ searching for the announcement, by listening at the announcement pubkey.
 
 # Announcing and searching
 
-## Making announcements
-As described above, at any given time we want to maintain various 
-announcements at various announcement secret keys.
+We maintain an invite announcement at all times.
+We also maintain an individual announcement for each friend to whom we have 
+not sent our current invite code.
+We keep track of the total amount of time we have spent making an individual 
+announcement to such a friend without a connection to the friend being made, 
+saving across sessions. Once this exceeds 64 hours, we use low-intensity 
+lookups (defined below) for the individual announcement.
 
-We make and maintain an announcement using forwarded Data Search and Store 
-Announcement requests.
+We can expect our other friends to be able to find our invite announcement; 
+however, we can not be certain that such a friend will still have the invite 
+code we sent, even if they did receive it, since they might for various 
+exceptional reasons have reverted to an earlier save state. There is also the 
+possibility that our invite announcement could fail due e.g. to a DoS attack. 
+So as a precaution, we also make low-intensity individual announcements for 
+such friends.
 
-The details are similar to those of onion announcements. Some of the constants 
-suggested here are based on those used in the onion, while others are based on 
-intuition, and all should be fine-tuned.
+We also search for the announcements of our offline friends.
+If an offline friend was added with an invite code and we have not yet 
+connected to the friend (see `FRIEND_CONFIRMED` in `Messenger.h`), we search 
+for its invite announcement.
+Otherwise, we search for the friend's invite announcement if we have an invite 
+code for it, else for the individual announcement.
 
-For the rest of this section, whenever we talk about sending packets to a DHT 
-node and receiving responses, it should be understood that if we are not 
-connected to the DHT, then this is done via a TCP relay using the Forwarding 
-protocol, and we nonetheless term this as "direct" communication with the DHT 
-node.
+Because it is possible that we have an outdated invite code for the friend, 
+when we search for a invite announcement we also make a low-intensity search 
+for the individual announcement.
 
-For each announcement we wish to make, we maintain a list of up to 8 DHT 
-nodes. This list will contain the nodes we have found closest to the 
-announcement public key. We mark a node on this list as an **open** node if  
-we confirm we are able to communicate with it directly, and we ensure the list 
-never contains more than 4 non-open nodes. Given this proviso, the list 
-contains nodes as close as possible to the target key; an attempt to add a 
-node succeeds if it can be added, removing a more distant node if the list is 
-full, without this resulting in too many non-open nodes.
+We ensure we are announced for the friend before beginning to search for it.
 
-When we talk about sending a "forwarded" request below, we mean that the 
-request is sent as the payload of a Forward request sent directly to a random 
-open node in the list. (Note that if we are not connected to the DHT, this 
-Forward request is itself forwarded via a TCP relay).
+The remainder of this section describes in detail a procedure for using Data 
+Search and Data Announcement packets to maintain and search for announcements.
 
-Initially, and periodically while the list is not full, we populate the list 
-by sending Data Search requests to random announce nodes (see [Finding 
-announce nodes]) from our DHT nodes lists if we are connected to the DHT, and 
+## Background: NAT and the Tox DHT
+```
+               A
+       |FCo|ARs|PRs|Sym
+    ---+---+---+---+---
+    FCo| > | > | > | >
+    ---+---+---+---+---
+    ARs| + | + | + | +
+  B ---+---+---+---+---
+    PRs| + | + | + | X
+    ---+---+---+---+---
+    Sym| + | + | X | X
+
+FCo: Full Cone or less restrictive
+ARs: Address Restricted cone
+PRs: Port Restricted cone
+Sym: Symmetric
+
+ > : A can connect to B
+ + : A can connect to B if B is also trying to connect to A
+ X : active hole-punching required for connection
+```
+
+Here, "A can connect to B" means that B receives packets sent by A to the 
+external address reported for B by a third-party connected to B. Because the 
+Tox DHT uses an eviction strategy which prefers closest nodes in a given 
+bucket (this is not standard Kademlia behaviour), the close list of a node 
+will tend to acquire the closest possible nodes in each bucket for which the 
+corresponding entry in the above table is not 'X'.
+
+Figure 13 in <https://arxiv.org/abs/1605.05606> gives us rough estimates for 
+the proportion of each kind of NAT we can expect to see, depending on to what 
+extent we expect mobile devices to form part of the DHT. In particular, it 
+suggests that we shouldn't expect more than around 10% of nodes to be full 
+cone or better, and that port restricted is the typical case. 
+
+(Terminological note: RFC 4787 deprecates the terminology for NAT types used 
+here; in the terminology it defines, symmetric means endpoint-dependent 
+mapping, and full cone resp. address restricted resp. port restricted means 
+endpoint-independent mapping with endpoint-independent filtering resp. 
+address-dependent filtering resp. address+port-dependent filtering.)
+
+NAT is relevant only to IPv4, but IPv6 may be deployed with stateful firewalls 
+with similar effects.
+
+## Lookups
+### Overview
+For each announcement at an announcement secret key we make, and for each 
+search for such an announcement, we perform a *lookup* of the key which aims 
+to find the `k` closest nodes to the key on the DHT network. The parameter `k` 
+is the *width* of the lookup; usually the width is `k=8`, but a 
+**low-intensity** lookup is a lookup with width `k=2`. 
+
+Given NAT, we can not expect to connect directly to these closest nodes (even 
+if they are invited to attempt to connect to us) nor can we rely on being able 
+to connect directly to nodes which can connect directly to them. So for 
+reliable operation, it is not sufficient to use forward requests only once, 
+and we must allow chains of forwarding.
+
+More concretely: suppose we are behind symmetric NAT, and the neighbourhood of 
+the target consists entirely of nodes behind port-restricted or worse, and 
+mostly port-restricted. Since the neighbourhood is mostly port-restricted, 
+they will successfully connect to each other, so the radius of the closest 
+buckets in their close lists will be small. So it might be that all the nodes 
+which are `<=1` steps from the target nodes are port-restricted or worse, 
+meaning that even if we used introductions we wouldn't be able to connect 
+directly to them. So we must use longer chains.
+
+### Details
+A **forward chain** is a list of 0-4 DHT nodes. Sending a packet to a node via 
+a forward chain means sending the packet within nested Forward Request packets 
+addressed to the nodes in the chain. If we are not connected to the DHT, this 
+is furtherly wrapped in a Forward Request sent to a TCP relay. If `N` is a 
+node, we write `[N]` for the forward chain consisting of N alone, and if `C` 
+is a forward chain, we write `C:N` for the chain resulting from appending `N` 
+to `C`. We write `[]` for the empty forward chain.
+
+For each announcement we wish to make or find, we maintain a **lookup list** 
+of up to `k` DHT nodes. This list contains nodes as close as possible to the 
+target key; an attempt to add a node to a full list succeeds if the node is 
+closer than the furthest node on the list, which is removed to make room. For 
+each node `N` on the list we maintain a forward chain `c(N)`. Whenever we 
+receive a response to a request (including a forward request) sent to `N` 
+along a forward chain `C`, we set `c(N)` to `C` if this does not increase the 
+chain length.
+
+To prevent exponential growth in traffic during the search process, we also 
+maintain an associated "pending response set" consisting of up to `k` 
+requests; whenever the algorithm below talks of sending a Data Search request 
+to a node `N`, we in fact first try to add a corresponding entry to this set. 
+This fails if the set is full of requests to nodes at least as close to the 
+target as `N`, and then no request is actually sent. Otherwise, the request is 
+added with a timestamp, with the oldest request to a node furthest from the 
+target being deleted to make room if necessary, and the request is sent. The 
+node is deleted from the set when a response is received or after 3 seconds. 
+
+Initially, and periodically while the lookup list is not full, we populate the 
+list by sending Data Search requests via `[]` to random announce nodes (see 
+[Announce nodes]) from our DHT nodes lists if we are connected to the DHT, and 
 to random bootstrap nodes otherwise.
 
-We periodically send Data Search requests to the nodes on the list; the 
-requests to open nodes are sent directly, and those to non-open nodes are 
-forwarded. When we receive a Data Search response, we send further Data Search 
-requests to any nodes given in the response which could be added as non-open 
-nodes to the list. We also attempt to add the sender of the response to the 
-list -- as an open node if we received the response directly, and as a 
-non-open node if it was forwarded. If we do add it as a non-open node in this 
-way, we also send it a direct Data Search request.
+When we receive a Data Search response to a request sent via forward chain `C` 
+to a node `N`, after possibly updating `c(N)` as described above, we send a 
+Data Search request to each node given in the response which could be added to 
+the list, as follows:
+If `N` is not on the list, we attempt to add `N` to the list with forward 
+chain `C`, and any such requests are sent via `[N]`. Otherwise, if the length 
+of `c(N)` is less than 4, these requests are sent via `c(N):N`. Otherwise, 
+each request is sent via `c(N'):N'` where `N'` is a random node on the list 
+among those such that `c(N')` has minimal length, if this minimal length is 
+less than 4. Otherwise, `N` is removed from the list, and the requests are 
+sent via `[]`.
 
-When we receive a Data Search response from a node which is already on the 
-list (as an open node if the response is direct), if the response indicates 
-that our current announcement is stored or that a Store Announcement request 
-would be accepted, we also send a Store Announcement request to that node 
-(making sure to use the Port/IP that's on the list rather than the source of 
-the Data Search response, to prevent UDP amplification attacks, and using the 
-same forwarders (if any) used for the Data Search request). In this request we 
-put an initial announcement, or a reannouncement if the response indicated 
-that our current announcement is already stored. We set the requested timeout 
-to 300 seconds. If we obtain an Announcement Store response from a node 
-indicating that the announcement is stored, we consider ourselves announced to 
-that node, until a Data Search response or further Store Announcement response 
-indicates otherwise.
-
-The interval between sending these periodic Data Search requests to a node on 
-our list is 120s if we are announced to it, and otherwise is `min(120,3n)` 
-seconds where `n` is a count of the number of Data Search requests which have 
-been sent to the node, set to 0 when the node is added to the list, and set to 
-1 when we are informed by a Data Search response from the node that we have 
-just ceased to be announced at the node.
+If `N` is added to the list in the above and `c(N)` is non-empty but none of 
+the nodes in the response could be added to the list, we send a Data Search 
+request to `N` via `[]`.
 
 A node on the list which fails to respond to a Data Search request is sent 
-another at most 10s later. After 3 consecutive Data Search requests are sent 
-to a node without a response, it is removed from the list.
+another at most 3s later. After 3 consecutive Data Search requests are sent to 
+a node without a response, it is removed from the list.
+
+### Rationale
+This procedure leads to us efficiently probing nodes to see if we can connect 
+to them directly (i.e. via `[]`), using forward chains of length greater than 
+1 only when necessary. In the unfortunate eventuality that we end up with a 
+list full of nodes with forward chains of maximal length, deleting a node 
+gives the opportunity for another node, perhaps a random dht node, to take its 
+place; this might lead us to query a new part of the network where we may find 
+more directly accessible nodes.
+
+## Making announcements
+To announce at a given announcement secret key, we perform a lookup for the 
+key as above, along with the following additional behaviour.
+
+When we receive a Data Search response from a node `N` which is already on the 
+lookup list of an announcement we wish to make: after the processing described 
+above, if the response indicates that our current announcement is stored or 
+that a Store Announcement request would be accepted, we also send a Store 
+Announcement request to `N` via `c(N)`. In this request we put an initial 
+announcement, or a reannouncement if the response indicated that our current 
+announcement is already stored. We set the requested timeout to 300 seconds. 
+
+If we obtain an Announcement Store response from a node on the list indicating 
+that the announcement is stored, we consider the announcement to be stored on 
+the node until a Data Search response or further Store Announcement response 
+indicates otherwise.
 
 We consider an announcement to be announced if it is stored on at least half 
 of the nodes in the list.
 
-We keep track of the total amount of time we have spent announcing at a given 
-individual key without a connection to the corresponding friend being made, 
-saving across sessions. Once this exceeds 64 hours, we switch to a 
-low-intensity mode; this simply means that we reduce the size of the list from 
-8 to 2, with at most 1 non-open node.
+For each node `N` on the lookup list, we periodically send Data Search 
+requests to `N` via `c(N)`. The interval between sending these periodic Data 
+Search requests to a node at which we are not announced is `min(120,3n)` 
+seconds where `n` is a count of the number of Data Search requests which have 
+been sent to `N`, set to 1 whenever `N` is added to the list, and reset to 1 
+when we are informed by a Data Search response from `N` that we have just 
+ceased to be announced at `N`.
+After we receive a Data Announcement response indicating that we are announced 
+at a node, we send a Data Search request to it 3 seconds before the 
+announcement is due to expire, or after 120s if this is sooner (which it will 
+be if the node accepted our requested announcement timeout of 300s).
 
-The "low-intensity" individual announcements used as a back-up alongside the 
-invite announcement use this low-intensity mode from the start, and moreover 
-do not start until the invite announcement is announced.
+The low-intensity individual announcements used as a back-up alongside the 
+invite announcement do not start until the invite announcement is announced.
 
-## Searching
-For each offline friend, we search for its announcements using forwarded Data 
-Search and Data Retrieve requests.
+## Finding announcements
+To search for an announcement at a given announcement secret key, we perform a 
+lookup for the key as above, along with the following additional behaviour.
 
-If the friend was added with an invite code and we have not yet connected to 
-the friend (see `FRIEND_CONFIRMED` in `Messenger.h`), we search for its invite 
-announcement.
+During a search lookup, if we receive a Data Search response indicating that 
+an announcement is stored, and the hash is not the hash of either of the two 
+most recent (according to the timestamps) announcements we have obtained for 
+the friend, then we send a Data Retrieve request. When we receieve an 
+announcement in a Data Retrieve response, we decrypt it and/or check the 
+signature as appropriate, and if it is valid and the timestamp is greater than 
+that on any previous announcement we obtained for the friend, we pass the 
+connection info to the appropriate modules; this will usually result in the 
+search being deleted soon thereafter.
 
-Otherwise, we search for the friend's invite announcement if we have an invite 
-code for it, else for the individual announcement.
+We also make periodic Data Search requests as for an announcement, but with 
+different timeouts: the timeout between periodic requests for each of the `k` 
+nodes is at least 15 and at most 600 seconds, and within these bounds is 
+calculated as one quarter of the time since we began searching for the friend, 
+or since an announcement for the friend was last seen.
 
-We ensure we are announced for the friend before beginning to search for it.
+When we first start searching for a given friend, and the search is not a 
+low-intensity search, for 17 seconds the timeout is set to 3 seconds.
 
-The process of searching is as for announcing, but with different timeouts: 
-the timeout between periodic requests for each of the 8 nodes is at least 15 
-and at most 2400 seconds, and within these bounds is calculated as one quarter 
-of the time since we began searching for the friend, or since an announcement 
-for the friend was last seen.
 
-When we first start searching for a given friend, for 17 seconds the timeout 
-is set to 3 seconds.
-
-If we receive a Search Data response indicating that an announcement is 
-stored, and the hash is not the hash of either of the two most recent 
-(according to the timestamps) announcements we have obtained for the friend, 
-then we send a Data Retrieve request. When we receieve an announcement, we 
-decrypt it and/or check the signature as appropriate, and if it is valid and 
-the timestamp is greater than that on any previous announcement we obtained 
-for the friend, we pass the connection info to the appropriate modules.
-
-Because it is possible that we have an outdated invite code for the friend, 
-when we search for a invite announcement we also search for the individual 
-announcement, with the same process but without the initial period of a high 
-rate of requests.
-
-## Finding announce nodes
-We term as **announce nodes** those DHT nodes who implement the DHT 
+## Announce nodes
+We term as **announce nodes** those DHT nodes which implement the DHT 
 Announcements protocol. We maintain an `announce_node` boolean flag on each 
 node in the DHT node lists, indicating whether we consider the node to be an 
 announce node. Whenever we add a node to a DHT node list, we set the flag to 
@@ -757,9 +866,7 @@ if there are no such, to a random key from the whole space of possible keys).
 Whenever we receive a Data Search response, we check if the responding host is 
 in a DHT node list, and if so we set its `announce_node` flag. All nodes in 
 lists for announcing and searching described above are considered to be 
-announce nodes. A node on a DHT node list which is deleted from an 
-announce/search list due to failing to respond to Data Search requests has its 
-flag set to false.
+announce nodes.
 
 When responding to Data Search requests, we give the announce nodes we know 
 closest to the target key (not including ourself).
@@ -768,11 +875,13 @@ closest to the target key (not including ourself).
 To ensure backwards compatibility, we continue to process onion packets as 
 usual, and moreover we search on the onion for offline friends who might still 
 be announcing on the onion. For an existing friend, we consider this to be the 
-case until they send us a shared signing pubkey. When adding a friend, we 
-consider it to be the case if and only if the added ID includes a nospam, and 
-when it does we also send a friend request.
+case until they send us an invite code. When adding a friend, we consider it 
+to be the case if and only if the added ID includes a nospam, and when it does 
+we also send a friend request via the onion.
 
 We don't announce via the onion, nor generate or expose any nospam.
+TODO: actually we should announce if we have active onion-only friends, or 
+else make sure not to let the friend search rate get too low. 
 
 Preferably, clients should indicate which friends are using the legacy onion 
 system, and warn the user of the privacy implications of this (so the user 
