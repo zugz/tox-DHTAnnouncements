@@ -943,8 +943,8 @@ Data Search request and then a reannouncement, at a cost of
 Searching:
 `<=9` searches per node in first 60s;
 `9 + \log_{5/4}(t/60)` searches per node in first t seconds.
-Averaging over first 1800 seconds: `24 * 8*2*(172+140) / 1800 = 66Bps`.
-Rate at 1800 seconds: `8*2*(172+140) / (1800 / 4) = 11Bps`.
+Averaging over first 1800 seconds: `8*2*(172+140) * 24/1800 = 66Bps`.
+Rate at 1800 seconds: `8*2*(172+140) * 4/1800 = 11Bps`.
 
 Churn:
 A very rough estimate of the effect of churn could be that it causes traffic 
@@ -953,4 +953,16 @@ have no data to back this estimate up, it may be way off.)
 That would lead to a churn cost of 62Bps for an announcement and 49Bps for a 
 search.
 
-These numbers seem to be suggesting total costs of around 0.2-2KBps.
+Total costs:
+Suppose we have `n` offline friends, each of which has our current invite 
+code. Then we make an invite announcement, `n` low-intensity individual 
+announcements, `n` searches for invite keys, and `n` low-intensity searches 
+for individual keys. Each low-intensity search/announcement has `1/4` of the 
+usual cost, so the effective total is `1+n/4` announcements and `n*(5/4)` 
+searches. So the above estimates give a total rate of
+`((1+n/4)*(94+62) + n*(5/4)*(66+49)) = (156 + n*183)Bps`
+averaged over the first 1800s, and
+`((1+n/4)*(94+62) + n*(5/4)*(11+49)) = (156 + n*114)Bps`
+at 1800s.
+Each offline friend who does not know our invite key adds another 156Bps for 
+an individual announcement (reduced to 39Bps after 64 hours).
