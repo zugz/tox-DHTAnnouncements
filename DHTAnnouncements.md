@@ -195,9 +195,10 @@ is equal to either of these.
 These packets form an RPC DHT Packet pair.
 
 #### Data Search Request
-| Length | Type       | Contents        |
-|:-------|:-----------|:----------------|
-| `32`   | Public Key | Data Public Key |
+| Length   | Type       | Contents                    |
+|:---------|:-----------|:----------------------------|
+| `32`     | Public Key | Data Public Key             |
+| `0 | 32` | Bytes      | SHA256 of previous response |
 
 #### Data Search Response
 
@@ -233,6 +234,15 @@ amplification abuse. Including all overheads (8 bytes for RPC Packet, 72 for
 DHT Packet, 8 for UDP header, 20 for IPv4 header), the minimum size of a 
 request is 140 bytes, and the maximum size of a response is 411 bytes, giving 
 an amplification ratio of 2.9. Hopefully not high enough to be useful.
+
+If a request contains a SHA256 which is equal to the SHA256 of the response 
+(i.e. of the bytes detailed in the table above) which would otherwise be sent 
+to the request, the following abbreviated version of the response is sent 
+instead.
+
+| Length | Type       | Contents        |
+|:-------|:-----------|:----------------|
+| `32`   | Public Key | Data public key |
 
 ### Data Retrieve Request and Response
 These packets form an RPC DHT Packet pair.
@@ -787,6 +797,12 @@ A node on the list which fails to respond to a Data Search request is sent
 another at most 3s later. After 3 consecutive Data Search requests are sent to 
 a node without a response, it is removed from the list.
 
+To reduce wasteful traffic, we store with each node on the list the last 
+response obtained from it, if any, and include its SHA256 in Data Search 
+requests to the node. When we receive a Data Search response indicating that 
+the hash in the request is that of the response which would have been sent, we 
+process the stored response as if it had been sent in this response.
+
 ### Rationale
 This procedure leads to us efficiently probing nodes to see if we can connect 
 to them directly (i.e. via `[]`), using forward chains of length greater than 
@@ -890,8 +906,10 @@ will exhort their friends to upgrade).
 # Traffic estimates
 Typical IPv4 UDP = 28 + data
 DHT packet = 28 + 80 + payload = 108 + payload
-Data Search = 108 + 32 = 140
-Data Search Response <= 108 + 303 = 411
+Initial Data Search request = 108 + 32 = 140
+Initial Data Search response <= 108 + 303 = 411
+Subsequent Data Search request = 108 + 32 + 32 = 172
+Subsequent unchanged Data Search response <= 108 + 32 = 140
 Announcement <= 386
 Store initial announcement = 108 + 56 + 53 + Announcement <= 603
 Store reannouncement = 108 + 56 + 53 + 32 = 249
@@ -920,13 +938,13 @@ Storing the announcement on 8 nodes costs another
 
 Once we are announced to all 8 nodes, assuming no churn, each 120s we send a 
 Data Search request and then a reannouncement, at a cost of
-`8 * 2 * (140+411+249+144) = 15104` per 120s, so 125Bps.
+`8 * 2 * (172+140+249+144) = 11280` per 120s, so 94Bps.
 
 Searching:
 `<=9` searches per node in first 60s;
 `9 + \log_{5/4}(t/60)` searches per node in first t seconds.
-Averaging over first 1800 seconds: `24 * 8816 / 1800 = 118Bps`.
-Rate at 1800 seconds: `8816 / (1800 / 4) = 20Bps`.
+Averaging over first 1800 seconds: `24 * 8*2*(172+140) / 1800 = 66Bps`.
+Rate at 1800 seconds: `8*2*(172+140) / (1800 / 4) = 11Bps`.
 
 Churn:
 A very rough estimate of the effect of churn could be that it causes traffic 
@@ -936,7 +954,3 @@ That would lead to a churn cost of 62Bps for an announcement and 49Bps for a
 search.
 
 These numbers seem to be suggesting total costs of around 0.2-2KBps.
-
-TODO: we could nearly halve maintenance costs by allowing the Data Search 
-packet to include a hash of a previous response, and having a short version of 
-the response packet which just confirms that the hash is still current.
