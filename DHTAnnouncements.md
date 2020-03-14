@@ -896,8 +896,8 @@ to be the case if and only if the added ID includes a nospam, and when it does
 we also send a friend request via the onion.
 
 We don't announce via the onion, nor generate or expose any nospam.
-TODO: actually we should announce if we have active onion-only friends, or 
-else make sure not to let the friend search rate get too low. 
+To make up for not announcing, we impose a higher minimum than usual on the 
+rate of searches, say at least one onion request per 30s per friend.
 
 Preferably, clients should indicate which friends are using the legacy onion 
 system, and warn the user of the privacy implications of this (so the user 
@@ -966,3 +966,20 @@ averaged over the first 1800s, and
 at 1800s.
 Each offline friend who does not know our invite key adds another 156Bps for 
 an individual announcement (reduced to 39Bps after 64 hours).
+
+Corresponding estimates for the onion:
+An onion request and response generates `403+395+387+354+416+357+298+238=2848` 
+bytes of traffic (packet kinds 80-83,8c-8e,84). We can generously estimate 
+that during a lookup, half of requests will be to nodes which do not receive 
+them (due to NAT), each such failed request costing `403+395+387+354=1539` 
+bytes. If for the purposes of a fair comparison we pretend the onion uses the 
+efficient lookup and maintenance procedure described above (the current 
+implementation is much more expensive), and make the same estimates for churn, 
+the cost of maintaining an established announcement and searches to `n` 
+offline friends is
+`((1+n)*5*8/900)*(2848+1539) + (8/120 + n*(8*24/1800))*2848 =
+(384 + n*499)Bps`.
+averaged over the first 1800s, and
+`((1+n)*5*8/900)*(2848+1539) + (8/120 + n*(8*4/1800))*2848 =
+(384 + n*246)Bps`.
+at 1800s.
