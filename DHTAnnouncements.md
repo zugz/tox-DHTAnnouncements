@@ -287,7 +287,7 @@ ID, a requested timeout, and an announcement:
 | `32`      | Timed Auth | Timed authenticator |
 | `4`       | `uint32_t` | Requested timeout   |
 | `1`       | Bytes      | Announcement Type   |
-| `[0-512]` | Bytes      | Announcement Data   |
+| `[0,512]` | Bytes      | Announcement Data   |
 
 The Timed Auth should be set to the timed authenticator obtained from a recent 
 Data Search response to a search for the same data public key. The recipient 
@@ -707,10 +707,10 @@ will tend to acquire the closest possible nodes in each bucket for which the
 corresponding entry in the above table is not 'X'.
 
 Figure 13 in <https://arxiv.org/abs/1605.05606> gives us rough estimates for 
-the proportion of each kind of NAT we can expect to see, depending on to what 
-extent we expect mobile devices to form part of the DHT. In particular, it 
-suggests that we shouldn't expect more than around 10% of nodes to be full 
-cone or better, and that port restricted is the typical case. 
+the proportion of each kind of NAT we can expect to see, depending on the 
+extent to which we expect mobile devices to form part of the DHT. In 
+particular, it suggests that we shouldn't expect more than around 10% of nodes 
+to be full cone or better, and that port restricted is the typical case. 
 
 (Terminological note: RFC 4787 deprecates the terminology for NAT types used 
 here; in the terminology it defines, symmetric means endpoint-dependent 
