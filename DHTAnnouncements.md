@@ -216,11 +216,11 @@ the tox object is initialised:
 The external unix time is then calculated at a particular time as
 `external_unix_time = e + d*t + u0`
 rounded to an integer, where `t` is time in seconds since initialisation 
-according to the system clock, as a real number. High-accuracy time (say 
-nearest-microsecond accuracy) should be used for `t`; if nearest-second 
-accuracy were used, an attacker could probe to estimate when the system clock 
-rolls over to the next second, and so get information on the true clock error 
-and drift.
+according to the system clock, as a real number. So `e` and `d` act as extra 
+error and drift respectively. High-accuracy time (say nearest-microsecond 
+accuracy) should be used for `t`; if nearest-second accuracy were used, an 
+attacker could probe to estimate when the system clock rolls over to the next 
+second, and so get information on the true clock error and drift.
 
 For bootstrap nodes, the concerns about tracking do not apply, and bootstrap 
 nodes should set `e=0` and `d=1`.
