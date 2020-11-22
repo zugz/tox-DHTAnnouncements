@@ -211,7 +211,8 @@ than that at the latter.
 The external unix time is calculated using some constants which are set when 
 the tox object is initialised:
 `u0` is unix time according to the system clock at initialisation;
-`d` is a real number generated uniformly randomly in the range `[0.99,1.01]`;
+`d` is a real number generated uniformly randomly in the range 
+`[0.9999,1.0001]`;
 `e` is a real number generated uniformly in the range `[-30,30]`.
 The external unix time is then calculated at a particular time as
 `external_unix_time = e + d*t + u0`
