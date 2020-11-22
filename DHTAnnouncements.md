@@ -50,9 +50,6 @@ constraints on possible replacements.
 
 *   Data usage should be much less than with the old system.
 
-*   Your system clock must be approximately correct (within about 20 minutes 
-    of the true time), or you won't be able to connect to friends.
-
 *   Your public key does not change when upgrading to this new system, it's 
     just printed differently. You do not need to re-add existing friends.
 
@@ -908,40 +905,30 @@ closest to the target key (not including ourself).
 ## Clock synchronisation
 It is important that there is a consensus across the network on the time used 
 to create timed hashes, and hence to choose announce and search locations. To 
-achieve this, nodes maintain an integer **synchronisation offset**. This is 
-initialised to 0. An API function allows it to be set.
+achieve this, nodes maintain an integer **synchronisation offset**, 
+initialised to 0.
 
 Once we are announced at some key, whenever we receive an Announce response 
 with a unix time, we examine the unix times most recently reported in Announce 
 responses by the announce nodes for all the keys at which we are announcing, 
-each incremented by the time since we received the corresponding response, and 
-our own external unix time. We search for a 120s window containing at least 
-two thirds of these times; if we find such a window, define the *suggested 
-synchronisation offset* to be the average of the times in this window minus 
-our current external unix time.
-
-If this suggested offset is small enough, the synchronisation offset is set to 
-it. Small enough here means at most `4000 + 0.02*t` seconds in magnitude, 
-where `t` is the time since creation of the tox object.
-
-Otherwise, we call a callback with this suggested synchronisation offset as a 
-parameter. An interactive client could react to this callback by reporting the 
-suggested offset to the user and asking them to confirm that it should be 
-implemented, and then on confirmation setting the synchronisation offset to 
-the suggested one. Alternatively, the suggested offset could simply be given 
-in a log message, leaving it to the user to update their system clock and 
-restart tox. Such user intervention or similar sanity check is required to 
-prevent a Sybil attacker maliciously setting a user's offset to arbitrary 
-values, which could be used to track the user across sessions.
+each incremented by the (external) time since we received the corresponding 
+response, and our own external unix time. We set the synchronisation offset to 
+the mean of the these times, after discarding the most extreme third (1/6 on 
+each side) as outliers. If the (external) time since initialisation is less 
+than 100000s, or if we are a bootstrap node, our own external unix time is not 
+discounted as an outlier even if it is in the most extreme third.
 
 Since the time sent in Announce responses is adjusted by the synchronisation 
 offset, the network will tend to establish a consensus time used for Announce 
 responses and timed hashes. Due to the error and drift in the external unix 
-times of the nodes involved, this consensus is likely to differ from true time 
--- but it is kept in line with true time by fresh nodes joining the network 
-with approximately correct external unix time, by bootstrap nodes which always 
-use approximately correct external unix time, and in extreme situations by the 
-limits on automatic adjustment of the synchronisation offset.
+times of the nodes involved, this consensus may differ somewhat from true 
+time, and a sustained attack could pull it far away -- but it will tend to 
+revert to true time due to bootstrap nodes and nodes which have recently 
+joined the network, whose external unix times will typically be approximately 
+correct. Having consensus time close to real time is a useful but not 
+essential property -- it means that a node joining the network can expect that 
+their initial announces will not have to be repeated with different timed 
+hashes once they set the synchronisation offset.
 
 # Migration
 To ensure backwards compatibility, we continue to process onion packets as 
