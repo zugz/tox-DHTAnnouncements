@@ -50,6 +50,9 @@ constraints on possible replacements.
 
 *   Data usage should be much less than with the old system.
 
+*   Your system clock must be within 24 hours of the actual time for 
+    friend-finding to work.
+
 *   Your public key does not change when upgrading to this new system, it's 
     just printed differently. You do not need to re-add existing friends.
 
@@ -911,24 +914,32 @@ initialised to 0.
 Once we are announced at some key, whenever we receive an Announce response 
 with a unix time, we examine the unix times most recently reported in Announce 
 responses by the announce nodes for all the keys at which we are announcing, 
-each incremented by the (external) time since we received the corresponding 
-response, and our own external unix time. We set the synchronisation offset to 
-the mean of the these times, after discarding the most extreme third (1/6 on 
-each side) as outliers. If the (external) time since initialisation is less 
-than 100000s, or if we are a bootstrap node, our own external unix time is not 
-discounted as an outlier even if it is in the most extreme third.
+each incremented by the time since we received the corresponding response. 
+Discard the most extreme third (1/6 on each side) as outliers, and let `c` be 
+the mean of the remaining times. Then set the offset to have absolute value 
+`max(0, min(24*60*60, abs(c-t)) - M/6)` and sign that of `c-t`,
+where M=1200 is the "margin" constant for timed hashes, and t is our unix 
+time.
 
 Since the time sent in Announce responses is adjusted by the synchronisation 
 offset, the network will tend to establish a consensus time used for Announce 
-responses and timed hashes. Due to the error and drift in the external unix 
-times of the nodes involved, this consensus may differ somewhat from true 
-time, and a sustained attack could pull it far away -- but it will tend to 
-revert to true time due to bootstrap nodes and nodes which have recently 
-joined the network, whose external unix times will typically be approximately 
-correct. Having consensus time close to real time is a useful but not 
-essential property -- it means that a node joining the network can expect that 
-their initial announces will not have to be repeated with different timed 
-hashes once they set the synchronisation offset.
+responses and timed hashes. Due to the error and drift in the unix times of 
+the nodes involved, this consensus may differ somewhat from true time, and an 
+attack could change the consensus time or temporarily destroy consensus by 
+creating many nodes reporting false times -- but the upper bound in the 
+formula above limits how far consensus time can be pulled from true time, and 
+the negative term means that in the absence of an attack it will tend to 
+revert to true time. Having consensus time close to true time is a useful but 
+not essential property -- it means that a node joining the network with a 
+correctly set system clock can expect that their initial announces will not 
+have to be repeated with different timed hashes once they set the 
+synchronisation offset.
+
+Note that, due to the upper bound in the formula above, the system clock of a 
+node must be within 24h of true time (or rather, of consensus time) for the 
+timed hashes to be correct. This is enough to deal with the apparently common 
+problem of systems which have a clock set to match the local time of a 
+timezone which is not the system timezone.
 
 # Migration
 To ensure backwards compatibility, we continue to process onion packets as 
