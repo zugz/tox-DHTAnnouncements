@@ -113,7 +113,7 @@ old API:
   non-deprecated identifier `tox_friend_add_legacy_address`, with 
   `TOX_LEGACY_ADDRESS_SIZE` in place of `TOX_ADDRESS_SIZE`.
 
-The use of the term `invitation` rather than "address" in the API is just to 
+The use of the term "invitation" rather than "address" in the API is just to 
 avoid conflict with the legacy API; they should be described to the user as 
 addresses. It is probably best to avoid referring specifically to the 
 `invite_code` part of the address, but when necessary it can be called the 
@@ -180,17 +180,6 @@ Data is indexed by a Curve25519 public key, called the Data Public Key. In the
 case of announcements, we refer to this as the Announcement Public Key, for 
 which the announcer should have the corresponding Announcement Secret Key.
 
-### Timed authenticators
-The **timed authenticator** (or **Timed Auth**) of a bytestring with a certain 
-timeout `timeout` is the 32-byte HMAC-SHA-512256 authenticator of the 
-concatenation of `unix_time/timeout` as a `uint64_t` and the bytestring, using 
-a secret key held for this exclusive purpose.
-
-To verify a purported timed authenticator of a bytestring, a node uses their 
-secret key to generate the timed authenticator for the current time and also 
-that for `timeout` seconds prior, and considers the authenticator valid if it 
-is equal to either of these.
-
 ### External unix time
 We try to avoid revealing specifics of a user's system clock which could be 
 used to track the user across sessions. Call the *error* of a clock its 
@@ -202,11 +191,11 @@ and drift are well within the range of the random additions, measuring the
 error and drift of the external unix time will give little information on the 
 true error and drift.
 
-The external unix time is to be used throughout the tox protocol whenever 
-behaviour depends on time. This applies in particular to timeouts: for the 
-purpose of such timeouts, one time is considered to be at least `n` seconds 
-after another if the external unix time at the former is at least `n` greater 
-than that at the latter.
+The external unix time is to be used in all interactions with untrusted dht 
+nodes and tcp servers whenever behaviour depends on time. This applies in 
+particular to timeouts: for the purpose of such timeouts, one time is 
+considered to be at least `n` seconds after another if the external unix time 
+at the former is at least `n` greater than that at the latter.
 
 The external unix time is calculated using some constants which are set when 
 the tox object is initialised:
@@ -226,8 +215,23 @@ second, and so get information on the true clock error and drift.
 For bootstrap nodes, the concerns about tracking do not apply, and bootstrap 
 nodes should set `e=0` and `d=1`.
 
+In the remainder of this document, it is to be understood that all references 
+to time refer to external unix time.
+
+### Timed authenticators
+The **timed authenticator** (or **Timed Auth**) of a bytestring with a certain 
+timeout `timeout` is the 32-byte HMAC-SHA-512256 authenticator of the 
+concatenation of the ratio `unix_time/timeout` as a `uint64_t` and the 
+bytestring, using a secret key held for this exclusive purpose, which is 
+randomly generated when the tox object is initiated.
+
+To verify a purported timed authenticator of a bytestring, a node uses their 
+secret key to generate the timed authenticator for the current time and also 
+that for `timeout` seconds prior, and considers the authenticator valid if it 
+is equal to either of these.
+
 ### Data Search Request and Response
-These packets form an RPC DHT Packet pair.
+These packets form a DHT RPC Packet pair.
 
 #### Data Search Request
 | Length   | Type       | Contents                    |
@@ -263,6 +267,8 @@ The timeout of this timed authenticator is 60s.
 
 The nodes returned are those announce nodes (at most 4) closest to the Data 
 Public Key known by the responding node (see [Announce nodes]).
+Nodes with non-publically-addressable IP addresses are included if and only if 
+the source IP address is not publically addressable.
 
 Note: as with Nodes requests, this part of the protocol is susceptible to UDP 
 amplification abuse. Including all overheads (8 bytes for RPC Packet, 72 for 
@@ -272,7 +278,7 @@ an amplification ratio of 2.9. Hopefully not high enough to be useful.
 
 If a request contains a SHA256 which is equal to the SHA256 of the response 
 (i.e. of the bytes detailed in the table above) which would otherwise be sent 
-to the request, the following abbreviated version of the response is sent 
+to the requester, the following abbreviated version of the response is sent 
 instead.
 
 | Length | Type       | Contents        |
@@ -280,7 +286,7 @@ instead.
 | `32`   | Public Key | Data public key |
 
 ### Data Retrieve Request and Response
-These packets form an RPC DHT Packet pair.
+These packets form a DHT RPC Packet pair.
 
 #### Data Retrieve Request
 | Length | Type       | Contents            |
@@ -303,7 +309,7 @@ attack.
 
 
 ### Store Announcement Request and Response
-These packets form an RPC DHT Packet pair.
+These packets form a DHT RPC Packet pair.
 
 #### Store Announcement Request
 
@@ -353,19 +359,19 @@ announcement.
 
 The stored time is 0 if the announcement request was rejected, else the time 
 in seconds that the announcement will be stored for. Unix time is included 
-only if the announcement request was accepted, and is then the external unix 
-time of the sender at the time that the packet is constructed, adjusted by the 
+only if the announcement request was accepted, and is then the unix time of 
+the sender at the time that the packet is constructed, adjusted by the 
 synchronisation offset of the sender (see [Clock synchronisation]).
 
 ### Storing announcements
-Memory permitting, a DHT node should accept any Store Announcement request and 
-store the announcement indexed by the announcement public key with the 
-lifetime requested up to a maximum of 900 seconds, and then respond with it to 
-any valid Data Retrieve request for it within its lifetime. After the lifetime 
-has expired, the data should be deleted. A reannouncement with the hash of an 
-undeleted announcement may extend the lifetime of the announcement to up to 
-900 seconds. A reannouncement with an incorrect hash should lead to the 
-announcement being immediately deleted.
+Memory permitting, a DHT node should accept any valid Store Announcement 
+request and store the announcement indexed by the announcement public key with 
+the lifetime requested up to a maximum of 900 seconds, and then respond with 
+it to any valid Data Retrieve request for it within its lifetime. After the 
+lifetime has expired, the data should be deleted. A reannouncement with the 
+hash of an undeleted announcement may extend the lifetime of the announcement 
+to up to 900 seconds. A reannouncement with an incorrect hash should lead to 
+the announcement being immediately deleted.
 
 When choosing what to store within given storage constraints, a node should 
 prefer to store those announcements with public keys closest to the node's DHT 
@@ -405,9 +411,9 @@ replacing the use of the onion there.
 If a peer wishes to send a packet to a destination via a forwarder which is a 
 DHT node, they send a Forward Request packet containing the packet and the DHT 
 key of the destination. The forwarder sends a Forwarding packet to the 
-destination, if it's in their DHT node lists. The destination replies by 
+destination if it is in their DHT close list. The destination replies by 
 sending a Forward Reply packet to the forwarder, and the forwarder then sends 
-a Forwarding packet back to original sender. In the Forwarding packet, the 
+a Forwarding packet back to the original sender. In the Forwarding packet, the 
 forwarder includes a "sendback" to be included in the reply, which tells the 
 forwarder how to route the reply.
 
@@ -420,12 +426,12 @@ A Forward Request may itself be received as a forwarded packet. In this case,
 the resulting Forwarding packet should include in its sendback the source 
 IP/Port and sendback of the Forwarding packet with which the Forward Request 
 was delivered, and handle a Forward Reply by sending its data in another 
-Forward Reply to that source. The intended use for this is to allow nodes who 
-are not able to use UDP to send announce requests, by forwarding the request 
-via a TCP relay and a DHT node close to the destination node. The only bound 
-on the length of such a chain is that the sendback grows with each step and 
-has bounded size; the protocol requires the sendbacks to grow slowly enough 
-that chains involving a TCP relay and 4 DHT forwarders will work. Note that 
+Forward Reply to that source. One use for this is to allow nodes who are not 
+able to use UDP to send announce requests, by forwarding the request via a TCP 
+relay and a DHT node close to the destination node. The only bound on the 
+length of such a chain is that the sendback grows with each step and has 
+bounded size; the protocol requires the sendbacks to grow slowly enough that 
+chains involving a TCP relay and 4 DHT forwarders will work. Note that 
 chaining forward requests can not be used to implement onion routing, due to 
 the lack of encryption at intermediate steps.
 
@@ -469,6 +475,10 @@ ensures that a Forwarding packet can't exceed the general bound in tox of 2048
 on the size of a UDP packet. If the 1791 bound is exceeded, the packet should 
 be ignored.
 
+The format of the sendback is not part of the protocol; it is an opaque 
+bytestring which need only be validated and understood by the sender.
+TODO: detail the format used by c-toxcore anyway.
+
 #### Forwarding Packet
 This is sent as the payload of a Protocol packet.
 
@@ -481,9 +491,6 @@ This is sent as the payload of a Protocol packet.
 The first byte indicates the length in bytes of the sendback which follows. 
 Any value between 0 and 254 is permissible. The value 255 is reserved for 
 future extension of the protocol.
-
-The format of the sendback is not part of the protocol; it is an opaque 
-bytestring which need only be validated and understood by the sender.
 
 The data of the forwarding packet should be interpreted as one of the packets 
 which are part of the DHT Announcements protocol, or as a Forward Request 
@@ -514,7 +521,7 @@ packet.
 |:-----------|:----------|:------------------|
 | `1`        | `uint8_t` | 0x0a              |
 | `7 | 19`   | IP/Port   | Addressee IP/Port |
-| `[0,4096]` | Bytes     | Data              |
+| `[0,1791]` | Bytes     | Data              |
 
 This is sent to a TCP server by a TCP client in an encrypted data packet. The 
 TCP server should treat it as a Forward Request, and send a Forwarding packet 
@@ -575,7 +582,7 @@ Suggested values:
 At a given time, two **timed hashes** of a 32-byte bytestring `key` are 
 defined as follows.
 
-Let `time` be external unix time as an unsigned 64 bit integer,
+Let `time` be unix time as an unsigned 64 bit integer,
 let `key_offset` be the last 8 bytes of `key` interpreted as a big-endian 
 unsigned 64 bit integer,
 let `synch_offset` be the current synchronisation offset (see [Clock 
@@ -670,13 +677,13 @@ announcement to such a friend without a connection to the friend being made,
 saving across sessions. Once this exceeds 64 hours, we use low-intensity 
 lookups (defined below) for the individual announcement.
 
-We can expect our other friends to be able to find our invite announcement; 
-however, we can not be certain that such a friend will still have the invite 
-code we sent, even if they did receive it, since they might for various 
-exceptional reasons have reverted to an earlier save state. There is also the 
-possibility that our invite announcement could fail due e.g. to a DoS attack. 
-So as a precaution, we also make low-intensity individual announcements for 
-such friends.
+We can expect the friends to whom we have sent our current invite code to be 
+able to find our invite announcement; however, we can not be certain that such 
+a friend will still have the invite code we sent, even if they did receive it, 
+since they might for various exceptional reasons have reverted to an earlier 
+save state. There is also the possibility that our invite announcement could 
+fail due e.g. to a DoS attack. So as a precaution, we also make low-intensity 
+individual announcements for such friends.
 
 We also search for the announcements of our offline friends.
 If an offline friend was added with an invite code and we have not yet 
@@ -689,7 +696,9 @@ Because it is possible that we have an outdated invite code for the friend,
 when we search for a invite announcement we also make a low-intensity search 
 for the individual announcement.
 
-We ensure we are announced for the friend before beginning to search for it.
+We ensure we are announced for the friend before beginning to search for it. 
+("Announced" here refers only to the primary announcement, not to any 
+secondary low-intensity announcement.)
 
 The remainder of this section describes in detail a procedure for using Data 
 Search and Data Announcement packets to maintain and search for announcements.
@@ -754,7 +763,7 @@ reliable operation, it is not sufficient to use forward requests only once,
 and we must allow chains of forwarding.
 
 More concretely: suppose we are behind symmetric NAT, and the neighbourhood of 
-the target consists entirely of nodes behind port-restricted or worse, and 
+a target node consists entirely of nodes behind port-restricted or worse, and 
 mostly port-restricted. Since the neighbourhood is mostly port-restricted, 
 they will successfully connect to each other, so the radius of the closest 
 buckets in their close lists will be small. So it might be that all the nodes 
@@ -786,7 +795,7 @@ requests; whenever the algorithm below talks of sending a Data Search request
 to a node `N`, we in fact first try to add a corresponding entry to this set. 
 This fails if the set is full of requests to nodes at least as close to the 
 target as `N`, and then no request is actually sent. Otherwise, the request is 
-added with a timestamp, with the oldest request to a node furthest from the 
+added with a timestamp, with the oldest request to the node furthest from the 
 target being deleted to make room if necessary, and the request is sent. The 
 node is deleted from the set when a response is received or after 3 seconds. 
 
@@ -958,16 +967,16 @@ system, and warn the user of the privacy implications of this (so the user
 will exhort their friends to upgrade).
 
 # Traffic estimates
-Typical IPv4 UDP = 28 + data
-DHT packet = 28 + 80 + payload = 108 + payload
-Initial Data Search request = 108 + 32 = 140
-Initial Data Search response <= 108 + 303 = 411
-Subsequent Data Search request = 108 + 32 + 32 = 172
-Subsequent unchanged Data Search response <= 108 + 32 = 140
-Announcement <= 386
-Store initial announcement = 108 + 56 + 53 + Announcement <= 603
-Store reannouncement = 108 + 56 + 53 + 32 = 249
-Store response = 108 + 36 = 144
+* Typical IPv4 UDP = 28 + data
+* DHT packet = 28 + 80 + payload = 108 + payload
+* Initial Data Search request = 108 + 32 = 140
+* Initial Data Search response <= 108 + 303 = 411
+* Subsequent Data Search request = 108 + 32 + 32 = 172
+* Subsequent unchanged Data Search response <= 108 + 32 = 140
+* Announcement <= 386
+* Store initial announcement = 108 + 56 + 53 + Announcement <= 603
+* Store reannouncement = 108 + 56 + 53 + 32 = 249
+* Store response = 108 + 36 = 144
 
 Forward packet overheads: negligible, so in the below we simply multiply costs 
 by 2 to account for the forwarding, assuming an average forward chain length 
