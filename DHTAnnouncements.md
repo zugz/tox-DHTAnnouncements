@@ -538,13 +538,14 @@ TCP server should treat it as a Forward Request, and send a Forwarding packet
 to the addressee IP/Port, with a sendback which should uniquely identify the 
 TCP client to the TCP server. The sendback should be at most 46 bytes.
 
-If the addressee port is <1024, or if the addressee IP address is not 
-publically routable, the packet should be ignored. This is to reduce the 
-potential for abuse.
+An implementation may want to consider sanity-checking the addressee IP/Port 
+to reduce the potential for abuse, e.g. rejecting reserved ports and 
+non-publically-routable addresses. However, this is pointless for servers 
+which continue to implement the Onion Packet (0x08) request, which already 
+allows clients to cause the server to send packets to arbitrary IP/Ports.
 
 Note that TCP servers running older versions of toxcore will close the 
-connection to the client on receiving this packet. TODO: probably we should 
-deal with this by adding versioning in the TCP relay handshake.
+connection to the client on receiving this packet.
 
 #### TCP Forwarding
 | Length   | Type      | Contents       |
