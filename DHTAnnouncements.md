@@ -479,10 +479,6 @@ ensures that a Forwarding packet can't exceed the general bound in tox of 2048
 on the size of a UDP packet. If the 1791 bound is exceeded, the packet should 
 be ignored.
 
-The format of the sendback is not part of the protocol; it is an opaque 
-bytestring which need only be validated and understood by the sender.
-TODO: detail the format used by c-toxcore anyway.
-
 #### Forwarding Packet
 This is sent as the payload of a Protocol packet.
 
@@ -519,6 +515,16 @@ sendback. If it indicates that it should itself be forwarded with a sendback,
 this should be done with another Forward Reply packet. If it indicates it 
 should be sent to a TCP client, this should be done with a TCP Forwarding 
 packet.
+
+The format of the sendback is not part of the protocol; it is an opaque 
+bytestring which need only be validated and understood by the sender.
+In c-toxcore, it consists of a timed auth with timeout 3600, followed by one 
+of the following:
+a byte with value 0 followed by an IP\_Port in packed node format;
+a byte with value 1 followed by an IP\_Port in packed node format followed by 
+a sendback;
+a byte with value 2 followed by a uint32 and a uint64 which identify a TCP 
+client.
 
 #### TCP Forward Request
 | Length     | Type      | Contents          |
