@@ -291,6 +291,7 @@ These packets form a DHT RPC Packet pair.
 #### Data Retrieve Request
 | Length | Type       | Contents            |
 |:-------|:-----------|:--------------------|
+| `1`    | Byte       | 0x00                |
 | `32`   | Public Key | Data public key     |
 | `32`   | Timed Auth | Timed Authenticator |
 
@@ -303,10 +304,13 @@ attack.
 #### Data Retrieve Response
 | Length | Type       | Contents        |
 |:-------|:-----------|:----------------|
+| `1`    | Byte       | 0x01            |
 | `32`   | Public Key | Data public key |
 | `1`    | Bool       | Data found      |
 | `[0,]` | Bytes      | Data            |
 
+The initial byte ensures that a Data Retrieve request packet can not be 
+replayed as a Data Retrieve response.
 
 ### Store Announcement Request and Response
 These packets form a DHT RPC Packet pair.
