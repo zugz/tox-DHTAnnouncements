@@ -379,9 +379,6 @@ the announcement being immediately deleted.
 
 When choosing what to store within given storage constraints, a node should 
 prefer to store those announcements with public keys closest to the node's DHT 
-public key. So a node should attempt to satisfy a Store Announcement request 
-by deleting as necessary some stored announcements which are furthest from the 
-node's key and which are further from the node's key than the announcement 
 public key.
 
 Announcements need not be handled as secure data; in particular, "deleting" an 
