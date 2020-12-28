@@ -359,12 +359,12 @@ announcement.
 |:--------|:-----------|:------------------------|
 | `32`    | Public Key | Announcement public key |
 | `4`     | `uint32_t` | Stored time             |
-| `0 | 8` | `uint64_t` | Unix time               |
+| `8`     | `uint64_t` | Unix time               |
 
-The stored time is 0 if the announcement request was rejected, else the time 
-in seconds that the announcement will be stored for. Unix time is included 
-only if the announcement request was accepted, and is then the unix time of 
-the sender at the time that the packet is constructed, adjusted by the 
+This packet is sent in response to a Store Announcement request to indicate 
+that the announcement has been successfully stored. Stored time is the time in 
+seconds that the announcement will be stored for. Unix time is the unix time 
+of the sender at the time that the packet is constructed, adjusted by the 
 synchronisation offset of the sender (see [Clock synchronisation]).
 
 ### Storing announcements
@@ -863,9 +863,9 @@ announcement, or a reannouncement if the response indicated that our current
 announcement is already stored. We set the requested timeout to 300 seconds. 
 
 If we obtain an Announcement Store response from a node on the list indicating 
-that the announcement is stored, we consider the announcement to be stored on 
-the node until a Data Search response or further Store Announcement response 
-indicates otherwise.
+that the announcement is stored for a certain duration, we consider the 
+announcement to be stored on the node until that duration expires or a Data 
+Search response indicates that it is no longer stored.
 
 We consider an announcement to be announced if it is stored on at least half 
 of the nodes in the list.
