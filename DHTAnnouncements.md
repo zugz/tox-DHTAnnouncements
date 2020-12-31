@@ -164,6 +164,11 @@ correspondingly call
 `tox_friend_add_norequest` if decoding is successful (perhaps after prompting 
 for a friend request message in the first two cases).
 
+## Metatextual remarks
+In this document, "should" and "must" are used informally, and are not 
+intended to be interpreted according to RFC 2119. It might be nice to have a 
+proper formal protocol specification, but this isn't it.
+
 # Announcements
 
 ## Overview
