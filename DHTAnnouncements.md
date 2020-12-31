@@ -182,8 +182,10 @@ which the announcer should have the corresponding Announcement Secret Key.
 
 ### External unix time
 We try to avoid revealing specifics of a user's system clock which could be 
-used to track the user across sessions. Call the *error* of a clock its 
-difference from true time, and call its *drift* the rate of change of error.
+used to track the user across sessions 
+<https://www.caida.org/publications/papers/2005/fingerprinting/>. Call the 
+*error* of a clock its difference from true time, and call its *drift* the 
+rate of change of error (also known as *clock skew*).
 The **external unix time** of a node is the 64-bit monotonically increasing 
 unix time as reported by their system clock, but with extra per-session random 
 error and drift; this is defined precisely below. As long as the true error 
