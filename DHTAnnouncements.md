@@ -412,9 +412,6 @@ the DHT.
 We also use this mechanism to route via a TCP relay if we are in TCP-only 
 mode.
 
-Note: this protocol should also be usable for announcing DHT Group Chats, 
-replacing the use of the onion there.
-
 #### Forwarding protocol overview
 If a peer wishes to send a packet to a destination via a forwarder which is a 
 DHT node, they send a Forward Request packet containing the packet and the DHT 
