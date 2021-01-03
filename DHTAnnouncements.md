@@ -796,19 +796,22 @@ of up to `k` DHT nodes. This list contains nodes as close as possible to the
 target key; an attempt to add a node to a full list succeeds if the node is 
 closer than the furthest node on the list, which is removed to make room. For 
 each node `N` on the list we maintain a forward chain `c(N)`. Whenever we 
-receive a response to a request (including a forward request) sent to `N` 
-along a forward chain `C`, we set `c(N)` to `C` if this does not increase the 
-chain length.
+receive a response to a request sent to `N` along a forward chain `C`, we set 
+`c(N)` to `C` if this does not increase the chain length. Moreover, we 
+similarly update `c(N')` for each node `N'` in the chain `C`, setting it to 
+the truncation of `C` which is the chain leading to `N` if this does not 
+increase the chain length.
 
 To prevent exponential growth in traffic during the search process, we also 
-maintain an associated "pending response set" consisting of up to `k` 
-requests; whenever the algorithm below talks of sending a Data Search request 
-to a node `N`, we in fact first try to add a corresponding entry to this set. 
-This fails if the set is full of requests to nodes at least as close to the 
-target as `N`, and then no request is actually sent. Otherwise, the request is 
-added with a timestamp, with the oldest request to the node furthest from the 
-target being deleted to make room if necessary, and the request is sent. The 
-node is deleted from the set when a response is received or after 3 seconds. 
+maintain an associated "pending response set" associated to the lookup list, 
+consisting of up to `k` requests; whenever the algorithm below talks of 
+sending a Data Search request to a node `N`, we in fact first try to add a 
+corresponding entry to this set. This fails if the set is full of requests to 
+nodes at least as close to the target as `N`, and then no request is actually 
+sent. Otherwise, the request is added with a timestamp, with the oldest 
+request to the node furthest from the target being deleted to make room if 
+necessary, and the request is sent. The node is deleted from the set when a 
+response is received or after 3 seconds.
 
 Initially, and periodically while the lookup list is not full, we populate the 
 list by sending Data Search requests via `[]` to random announce nodes (see 
@@ -816,9 +819,9 @@ list by sending Data Search requests via `[]` to random announce nodes (see
 to random bootstrap nodes otherwise.
 
 When we receive a Data Search response to a request sent via forward chain `C` 
-to a node `N`, after possibly updating `c(N)` as described above, we send a 
-Data Search request to each node given in the response which could be added to 
-the list, as follows:
+to a node `N`, after possibly updating `c(N)` as described above, we possibly 
+send a Data Search request to each node given in the response which could be 
+added to the list (possibly none), as follows:
 If `N` is not on the list, we attempt to add `N` to the list with forward 
 chain `C`, and any such requests are sent via `[N]`. Otherwise, if the length 
 of `c(N)` is less than 4, these requests are sent via `c(N):N`. Otherwise, 
@@ -827,13 +830,18 @@ among those such that `c(N')` has minimal length, if this minimal length is
 less than 4. Otherwise, `N` is removed from the list, and the requests are 
 sent via `[]`.
 
-If `N` is added to the list in the above and `c(N)` is non-empty but none of 
-the nodes in the response could be added to the list, we send a Data Search 
-request to `N` via `[]`.
+If `N` is added to the list in the above and `c(N)` is non-empty:
+* if none of the nodes in the response could be added to the list, we send a 
+  Data Search request to `N` via `[]`;
+* otherwise we send another Data Search request to `N` after 6s if `N` is 
+  still on the list, via `c(N)` (which may have changed). (This gives another 
+  chance to send requests to the nodes `N` returns, via a route less likely to 
+  fail.)
 
-A node on the list which fails to respond to a Data Search request is sent 
-another at most 3s later. After 3 consecutive Data Search requests are sent to 
-a node without a response, it is removed from the list.
+A node `N` on the list which fails to respond to a Data Search request is sent 
+another after 3s, along `c(N)` (which may have changed). After 3 consecutive 
+Data Search requests are sent to a node without a response, it is removed from 
+the list.
 
 To reduce wasteful traffic, we store with each node on the list the last 
 response obtained from it, if any, and include its SHA256 in Data Search 
@@ -852,17 +860,18 @@ more directly accessible nodes.
 
 ## Making announcements
 To announce at a given announcement secret key, we perform a lookup for the 
-key as above, along with the following additional behaviour.
+corresponding public key as above, along with the following additional 
+behaviour.
 
 When we receive a Data Search response from a node `N` which is already on the 
 lookup list of an announcement we wish to make: after the processing described 
-above, if the response indicates that our current announcement is stored or 
-that a Store Announcement request would be accepted, we also send a Store 
-Announcement request to `N` via `c(N)`. In this request we put an initial 
-announcement, or a reannouncement if the response indicated that our current 
-announcement is already stored. We set the requested timeout to 300 seconds. 
+above, if the response indicates that a Store Announcement request would be 
+accepted and `N` is still on the list, we also send a Store Announcement 
+request to `N` via `c(N)`. In this request we put an initial announcement, or 
+a reannouncement if the response indicated that our current announcement is 
+already stored. We set the requested timeout to 300 seconds.
 
-If we obtain an Announcement Store response from a node on the list indicating 
+If we obtain an Store Announcement response from a node on the list indicating 
 that the announcement is stored for a certain duration, we consider the 
 announcement to be stored on the node until that duration expires or a Data 
 Search response indicates that it is no longer stored.
@@ -878,9 +887,11 @@ been sent to `N`, set to 1 whenever `N` is added to the list, and reset to 1
 when we are informed by a Data Search response from `N` that we have just 
 ceased to be announced at `N`.
 After we receive a Data Announcement response indicating that we are announced 
-at a node, we send a Data Search request to it 3 seconds before the 
+at a node, we send a Data Search request to it 10 seconds before the 
 announcement is due to expire, or after 120s if this is sooner (which it will 
 be if the node accepted our requested announcement timeout of 300s).
+
+TODO: mandate mechanism to rotate pings?
 
 The low-intensity individual announcements used as a back-up alongside the 
 invite announcement do not start until the invite announcement is announced.
@@ -917,6 +928,8 @@ announce node. Whenever we add a node to a DHT node list, we set the flag to
 false and send the node a Data Search request, with the data key set to a 
 random key amongst those we are currently searching for or announcing at (or 
 if there are no such, to a random key from the whole space of possible keys). 
+TODO: can be less aggressive? Just mix in occasional requests to non-announce 
+nodes?
 Whenever we receive a Data Search response, we check if the responding host is 
 in a DHT node list, and if so we set its `announce_node` flag. All nodes in 
 lists for announcing and searching described above are considered to be 
