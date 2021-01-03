@@ -313,7 +313,6 @@ attack.
 |:-------|:-----------|:----------------|
 | `32`   | Public Key | Data public key |
 | `1`    | Byte       | 0x01            |
-| `1`    | Bool       | Data found      |
 | `[0,]` | Bytes      | Data            |
 
 The byte after the data public key ensures that a Data Retrieve request packet 
