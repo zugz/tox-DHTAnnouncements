@@ -806,12 +806,12 @@ To prevent exponential growth in traffic during the search process, we also
 maintain an associated "pending response set" associated to the lookup list, 
 consisting of up to `k` requests; whenever the algorithm below talks of 
 sending a Data Search request to a node `N`, we in fact first try to add a 
-corresponding entry to this set. This fails if the set is full of requests to 
-nodes at least as close to the target as `N`, and then no request is actually 
-sent. Otherwise, the request is added with a timestamp, with the oldest 
-request to the node furthest from the target being deleted to make room if 
-necessary, and the request is sent. The node is deleted from the set when a 
-response is received or after 3 seconds.
+corresponding entry to this set. This fails if the set already contains a 
+request to `N` or is full of requests to nodes at least as close to the target 
+as `N`, and then no request is actually sent. Otherwise, the request is added 
+with a timestamp, with the oldest request to the node furthest from the target 
+being deleted to make room if necessary, and the request is sent. The node is 
+deleted from the set when a response is received or after 3 seconds.
 
 Initially, and periodically while the lookup list is not full, we populate the 
 list by sending Data Search requests via `[]` to random announce nodes (see 
@@ -821,14 +821,17 @@ to random bootstrap nodes otherwise.
 When we receive a Data Search response to a request sent via forward chain `C` 
 to a node `N`, after possibly updating `c(N)` as described above, we possibly 
 send a Data Search request to each node given in the response which could be 
-added to the list (possibly none), as follows:
-If `N` is not on the list, we attempt to add `N` to the list with forward 
-chain `C`, and any such requests are sent via `[N]`. Otherwise, if the length 
-of `c(N)` is less than 4, these requests are sent via `c(N):N`. Otherwise, 
-each request is sent via `c(N'):N'` where `N'` is a random node on the list 
-among those such that `c(N')` has minimal length, if this minimal length is 
-less than 4. Otherwise, `N` is removed from the list, and the requests are 
-sent via `[]`.
+added to the list (possibly none), and possibly consider `N` to be 
+*announceable*, according to the following rules:
+* If `N` is not on the list: we attempt to add `N` to the list with forward 
+  chain `C`, and any such requests are sent via `[N]`. `N` is announceable if 
+  and only if no such request is to a node closer to the target than `N`. 
+* Otherwise: if the length of `c(N)` is less than 4, these requests are sent 
+  via `c(N):N`. Otherwise, each request is sent via `c(N'):N'` where `N'` is a 
+  random node on the list among those such that `c(N')` has minimal length, if 
+  this minimal length is less than 4. Otherwise, `N` is removed from the list, 
+  and the requests are sent via `[]`. `N` is announceable except in this last 
+  eventuality, i.e. `N` is announceable if and only if it remains on the list.
 
 If `N` is added to the list in the above and `c(N)` is non-empty:
 * if none of the nodes in the response could be added to the list, we send a 
@@ -863,13 +866,18 @@ To announce at a given announcement secret key, we perform a lookup for the
 corresponding public key as above, along with the following additional 
 behaviour.
 
-When we receive a Data Search response from a node `N` which is already on the 
-lookup list of an announcement we wish to make: after the processing described 
-above, if the response indicates that a Store Announcement request would be 
-accepted and `N` is still on the list, we also send a Store Announcement 
-request to `N` via `c(N)`. In this request we put an initial announcement, or 
-a reannouncement if the response indicated that our current announcement is 
-already stored. We set the requested timeout to 300 seconds.
+When we receive a Data Search response from a node `N`, if the response 
+indicates that a Store Announcement request would be accepted, and if `N` is 
+announceable according to the processing described above, we also send a Store 
+Announcement request to `N` via the same route used to send the Data Search 
+request. In this request we put an initial announcement, or a reannouncement 
+if the response indicated that our current announcement is already stored. We 
+set the requested timeout to 300 seconds.
+
+The definition of "announceable" ensures in particular that under perfect 
+network conditions, an announcement will be made as a result of the cascade of 
+requests originating with the first request to a random dht node, with no 
+timeouts needing to be triggered.
 
 If we obtain an Store Announcement response from a node on the list indicating 
 that the announcement is stored for a certain duration, we consider the 
@@ -903,12 +911,12 @@ lookup for the key as above, along with the following additional behaviour.
 During a search lookup, if we receive a Data Search response indicating that 
 an announcement is stored, and the hash is not the hash of either of the two 
 most recent (according to the timestamps) announcements we have obtained for 
-the friend, then we send a Data Retrieve request. When we receieve an 
-announcement in a Data Retrieve response, we decrypt it and/or check the 
-signature as appropriate, and if it is valid and the timestamp is greater than 
-that on any previous announcement we obtained for the friend, we pass the 
-connection info to the appropriate modules; this will usually result in the 
-search being deleted soon thereafter.
+the friend, then we send a Data Retrieve request via the same route used for 
+the Data Search request. When we receieve an announcement in a Data Retrieve 
+response, we decrypt it and/or check the signature as appropriate, and if it 
+is valid and the timestamp is greater than that on any previous announcement 
+we obtained for the friend, we pass the connection info to the appropriate 
+modules; this will usually result in the search being deleted soon thereafter.
 
 We also make periodic Data Search requests as for an announcement, but with 
 different timeouts: the timeout between periodic requests for each of the `k` 
