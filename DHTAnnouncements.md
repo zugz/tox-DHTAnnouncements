@@ -538,14 +538,33 @@ TCP server should treat it as a Forward Request, and send a Forwarding packet
 to the addressee IP/Port, with a sendback which should uniquely identify the 
 TCP client to the TCP server. The sendback should be at most 46 bytes.
 
-An implementation may want to consider sanity-checking the addressee IP/Port 
-to reduce the potential for abuse, e.g. rejecting reserved ports and 
-non-publically-routable addresses. However, this is pointless for servers 
-which continue to implement the Onion Packet (0x08) request, which already 
-allows clients to cause the server to send packets to arbitrary IP/Ports.
-
 Note that TCP servers running older versions of toxcore will close the 
 connection to the client on receiving this packet.
+
+##### Security considerations
+This forwarding protocol allows clients of a TCP server to cause the server to 
+send packets to arbitrary ports on arbitrary hosts, with data after the 
+sendback chosen by the client. Implementations should consider potential abuse 
+and possible mitigations.
+
+The existing Onion Packet (0x08) request similarly allows clients to cause the 
+server to send chosen data to arbitrary IP/Ports, so similar considerations 
+apply to that.
+
+One potential abuse is to cause the server to participate in a DDoS attack; 
+this can be mitigated by rate-limiting. Another is to relay messages via the 
+server in order to mask their origin, e.g. to control a botnet. Since the 
+primary purpose of a TCP server is to relay messages between clients, this is 
+not really a new problem, but possibly the fact that only the sender has to 
+register as a client of the server makes it more abusable. Possible 
+mitigations for this to consider (each with their own obvious downsides):
+* Have the TCP server continuously crawl the tox dht, and only allow 
+  forwarding to dht nodes it has seen.
+* Include IP address of TCP client in the sendback.
+* Vet TCP clients and monitor for abuse.
+
+Servers might also consider refusing to forward to non-publically routable 
+addresses.
 
 #### TCP Forwarding
 | Length   | Type      | Contents       |
