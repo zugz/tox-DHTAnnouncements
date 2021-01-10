@@ -918,6 +918,9 @@ is valid and the timestamp is greater than that on any previous announcement
 we obtained for the friend, we pass the connection info to the appropriate 
 modules; this will usually result in the search being deleted soon thereafter.
 
+If we are storing an announcement which we are searching for, it should be 
+treated as if we received it in a Data Retrieve response.
+
 We also make periodic Data Search requests as for an announcement, but with 
 different timeouts: the timeout between periodic requests for each of the `k` 
 nodes is at least 15 and at most 600 seconds, and within these bounds is 
