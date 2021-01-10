@@ -734,6 +734,13 @@ The remainder of this section describes in detail a procedure for using Data
 Search and Data Announcement packets to maintain and search for announcements.
 
 ## Background: NAT and the Tox DHT
+Although storing and retrieving data at a key is the primary purpose of a 
+Kademlia-style DHT, the Tox DHT adapts Kademlia in a way (described below) 
+which causes nodes to often include nodes behind restrictive NAT in their 
+routing tables. This is useful for the main purpose of the Tox DHT, which is 
+to look up nodes rather than data, but means we have to work a little harder 
+to robustly use it for storage.
+
 ```
                A
        |FCo|ARs|PRs|Sym
