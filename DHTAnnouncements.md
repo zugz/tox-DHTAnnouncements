@@ -734,14 +734,7 @@ secondary low-intensity announcement.)
 The remainder of this section describes in detail a procedure for using Data 
 Search and Data Announcement packets to maintain and search for announcements.
 
-## Background: NAT and the Tox DHT
-Although storing and retrieving data at a key is the primary purpose of a 
-Kademlia-style DHT, the Tox DHT adapts Kademlia in a way (described below) 
-which causes nodes to often include nodes behind restrictive NAT in their 
-routing tables. This is useful for the main purpose of the Tox DHT, which is 
-to look up nodes rather than data, but means we have to work a little harder 
-to robustly use it for storage.
-
+## Background on NAT
 ```
                A
        |FCo|ARs|PRs|Sym
@@ -765,11 +758,7 @@ Sym: Symmetric
 ```
 
 Here, "A can connect to B" means that B receives packets sent by A to the 
-external address reported for B by a third-party connected to B. Because the 
-Tox DHT uses an eviction strategy which prefers closest nodes in a given 
-bucket (this is not standard Kademlia behaviour), the close list of a node 
-will tend to acquire the closest possible nodes in each bucket for which the 
-corresponding entry in the above table is not 'X'.
+external address reported for B by a third-party connected to B.
 
 Figure 13 in <https://arxiv.org/abs/1605.05606> gives us rough estimates for 
 the proportion of each kind of NAT we can expect to see, depending on the 
@@ -799,15 +788,6 @@ if they are invited to attempt to connect to us) nor can we rely on being able
 to connect directly to nodes which can connect directly to them. So for 
 reliable operation, it is not sufficient to use forward requests only once, 
 and we must allow chains of forwarding.
-
-More concretely: suppose we are behind symmetric NAT, and the neighbourhood of 
-a target node consists entirely of nodes behind port-restricted or worse, and 
-mostly port-restricted. Since the neighbourhood is mostly port-restricted, 
-they will successfully connect to each other, so the radius of the closest 
-buckets in their close lists will be small. So it might be that all the nodes 
-which are `<=1` steps from the target nodes are port-restricted or worse, 
-meaning that even if we used introductions we wouldn't be able to connect 
-directly to them. So we must use longer chains.
 
 ### Details
 A **forward chain** is a list of 0-4 DHT nodes. Sending a packet to a node via 
