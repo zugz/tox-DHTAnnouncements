@@ -337,7 +337,7 @@ ID, a requested timeout, and an announcement:
 |:----------|:-----------|:--------------------|
 | `32`      | Timed Auth | Timed authenticator |
 | `4`       | `uint32_t` | Requested timeout   |
-| `1`       | Bytes      | Announcement Type   |
+| `1`       | `uint8_t`  | Announcement Type   |
 | `[0,512]` | Bytes      | Announcement Data   |
 
 The Timed Auth should be set to the timed authenticator obtained from a recent 
@@ -586,10 +586,11 @@ only when the connection info changes.
 
 There are two kinds of announcement: individual announcements and invite 
 announcements. In each case, an announcement secret key will be obtained by 
-combining the time of the announcement with a secret shared only by those the 
-announcement is intended for, and the announcement public key will be that 
-derived from the secret key. The differences are in the choice of secret, and 
-in how the connection info is encrypted and/or signed in the announcement.
+combining the time at which the announcement is made with a secret shared only 
+by those the announcement is intended for, and the announcement public key 
+will be that derived from the secret key. The differences are in the choice of 
+secret, and in how the connection info is encrypted and/or signed in the 
+announcement.
 
 The intention is that the intended parties can be assured that what is 
 announced really is our current connection info, and yet no-one else can link 
@@ -825,7 +826,7 @@ each node `N` on the list we maintain a forward chain `c(N)`. Whenever we
 receive a response to a request sent to `N` along a forward chain `C`, we set 
 `c(N)` to `C` if this does not increase the chain length. Moreover, we 
 similarly update `c(N')` for each node `N'` in the chain `C`, setting it to 
-the truncation of `C` which is the chain leading to `N` if this does not 
+the truncation of `C` which is the chain leading to `N'` if this does not 
 increase the chain length.
 
 To prevent exponential growth in traffic during the search process, we also 
